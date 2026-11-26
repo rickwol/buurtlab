@@ -380,6 +380,13 @@ const LS='https://api.pdok.nl/bzk/locatieserver/search/v3_1/free',BAG='https://a
  CBS=y=>`https://api.pdok.nl/cbs/wijken-en-buurten-${y}/ogc/v1/collections/buurten/items`;
 const UTIL={winkelfunctie:['winkel','winkel','Winkels'],bijeenkomstfunctie:['kantoor','sport','Bijeenkomst'],kantoorfunctie:['kantoor','kantoor','Kantoren'],gezondheidszorgfunctie:['kantoor','kantoor','Zorg'],
  onderwijsfunctie:['kantoor','onderwijs','School'],logiesfunctie:['kantoor','logies','Logies'],sportfunctie:['kantoor','sport','Sport'],celfunctie:['kantoor','logies','Cellen'],industriefunctie:['fabriek','industrie','Bedrijven']};
+let EVM=null;
+async function evData(){if(!EVM){try{EVM=(await (await fetch('profielen/ev_msr.json')).json()).filter(r=>r[4]>0)}catch(e){EVM=[]}}return EVM}
+function evLocal(polys){if(!EVM||!EVM.length)return null;let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;for(const p of polys)for(const[x,y]of p[0]){x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y)}
+ let m=EVM.filter(r=>r[0]>=x0&&r[0]<=x1&&r[1]>=y0&&r[1]<=y1&&inPolys([r[0],r[1]],polys));
+ if(m.length<2){const d=.006;m=EVM.filter(r=>r[0]>=x0-d&&r[0]<=x1+d&&r[1]>=y0-d&&r[1]<=y1+d)}if(!m.length)return null;
+ const ev=m.reduce((s,r)=>s+r[3],0),cars=m.reduce((s,r)=>s+r[4],0),u=m.filter(r=>r[2]<100&&r[2]>=10),apa=u.length&&u.reduce((s,r)=>s+r[2],0)>0?clamp(u.reduce((s,r)=>s+r[4],0)/u.reduce((s,r)=>s+r[2],0),.2,2.5):.95;
+ return{n:m.length,ev,cars,share:cars>0?ev/cars:0,apa}}
 const RIVM='https://data.rivm.nl/geo/nl/wfs';
 const mapLab=v=>{v=String(v||'').toUpperCase().trim();return /^A\+/.test(v)?'A+':v==='A'?'A':v==='B'?'B':v==='C'?'C':v==='D'?'D':/^[EFG]$/.test(v)?'EFG':null};
 const labelFromYear=y=>!y||y<1946?'EFG':y<1975?'D':y<1992?'C':y<2006?'B':y<2015?'A':'A+';
@@ -400,7 +407,8 @@ $('#imp-q').addEventListener('input',e=>{const q=e.target.value.trim();pick_=nul
    $('#imp-sug').querySelectorAll('button').forEach(x=>x.setAttribute('aria-selected',x===b));choose({code:d.buurtcode,naam:d.buurtnaam||d.weergavenaam,gemeente:d.gemeentenaam||''},true)}}
   catch(err){$('#imp-sug').innerHTML=`<p class="note">Zoeken lukt niet (${esc(err.message)}). Vul de buurtcode in, bijv. BU03440420.</p>`}},250)});
 $('#imp-go').onclick=async()=>{if(!pick_)return;const b=$('#imp-go');b.disabled=true;
- try{const s=await importBuurt(pick_,{lp:+$('#imp-lp').value||0,pv:+$('#imp-pv').value||0,wp:$('#imp-wp').checked});setState(s);ist(`Klaar: ${nf.format(s.buurt.vbo)} verblijfsobjecten samengevoegd tot ${s.objs.length} blokken op een grid van ${s.n}×${s.n}. `+(s.buurt.lab==null?'Energielabels konden niet worden opgehaald; alle labels zijn geschat uit het bouwjaar.':`Geregistreerde energielabels gevonden voor ${nf.format(s.buurt.lab)} panden.`));showTab('lab')}
+ try{const s=await importBuurt(pick_,{evm:$('#imp-evm').value,evp:+$('#imp-evp').value||0,pv:+$('#imp-pv').value||0,wp:$('#imp-wp').checked});setState(s);ist(`Klaar: ${nf.format(s.buurt.vbo)} verblijfsobjecten samengevoegd tot ${s.objs.length} blokken op een grid van ${s.n}×${s.n}. `+(s.buurt.lab==null?'Energielabels konden niet worden opgehaald; alle labels zijn geschat uit het bouwjaar. ':`Geregistreerde energielabels gevonden voor ${nf.format(s.buurt.lab)} panden. `)+
+  (s.buurt.ev.mode==='pct'?`Elektrische auto's: scenario ${s.buurt.ev.pct}% van ${nf1.format(s.buurt.ev.apa)} auto per adres.`:s.buurt.ev.msr?`Elektrische auto's: ${nf1.format(s.buurt.ev.share*100)}% van de auto's, uit ${s.buurt.ev.msr} MSR's in SlimLaden.`:`Geen EV-data van SlimLaden voor deze buurt: landelijk gemiddelde gebruikt (7,8% van 0,95 auto per adres).`));showTab('lab')}
  catch(err){ist('Importeren mislukt: '+err.message+(location.protocol==='file:'?' Open Buurtlab via een webserver.':' Werkt het hier niet, gebruik dan rickwol.github.io/buurtlab.'))}
  b.disabled=false};
 async function importBuurt(pk,opt){
@@ -412,12 +420,13 @@ async function importBuurt(pk,opt){
  const bb=[x0,y0,x1,y1].map(v=>v.toFixed(6)).join(',');
  const vbos=await allItems(`${BAG}verblijfsobject/items?f=json&limit=1000&bbox=${bb}`,'Verblijfsobjecten');
  const pands=await allItems(`${BAG}pand/items?f=json&limit=1000&bbox=${bb}`,'Panden');
+ await evData();const evl=evLocal(polys);
  ist('Energielabels ophalen bij RIVM…');let labels=null;
  try{const j=await getJSON(`${RIVM}?service=WFS&version=1.0.0&request=GetFeature&typeName=nl:rvo_energielabels&outputFormat=application/json&maxFeatures=50000&bbox=${bb}&propertyName=identificatie,dominant_label,aant_labels`);
   labels={};for(const f of j.features||[]){const p=f.properties||{},l=mapLab(p.dominant_label);if(l)labels[pid(p.identificatie)]={l,n:+p.aant_labels||1}}}catch(e){labels=null}
  ist('Gebouwen samenvoegen…');
- return buildFromBag({polys,vbos,pands,labels,code:pk.code,naam:pr.buurtnaam||pk.naam,gemeente:pr.gemeentenaam||pk.gemeente,opt})}
-function buildFromBag({polys,vbos,pands,labels,code,naam,gemeente,opt}){
+ return buildFromBag({polys,vbos,pands,labels,evl,code:pk.code,naam:pr.buurtnaam||pk.naam,gemeente:pr.gemeentenaam||pk.gemeente,opt})}
+function buildFromBag({polys,vbos,pands,labels,evl,code,naam,gemeente,opt}){
  const LB=id=>labels&&labels[id];
  const lat0=(polys[0][0].reduce((s,p)=>s+p[1],0))/polys[0][0].length,lon0=polys[0][0][0][0],kx=111320*Math.cos(lat0*Math.PI/180),ky=110574;
  const XY=([lo,la])=>[(lo-lon0)*kx,(la-lat0)*ky];
@@ -457,19 +466,19 @@ function buildFromBag({polys,vbos,pands,labels,code,naam,gemeente,opt}){
    const w=b.aantal||1;g.aantal+=b.aantal||0;g.m2s+=b.aantal?b.m2*b.aantal:b.m2;g.bjs+=(b.bj||0)*w;g.ws+=w;g.xs+=b.x;g.ys+=b.y;g.k++;if(b.street)g.streets[b.street]=(g.streets[b.street]||0)+w}
   merged=Object.values(grp);if(merged.length<=n*n*.8||f>6)break}
  const objs=[],used=new Set();let id=0;merged.sort((a,b)=>(b.aantal||b.m2s/100)-(a.aantal||a.m2s/100));
- const cell=span/(n-1);let lpAcc=0,pvAcc=0;
+ const cell=span/(n-1);let lpAcc=0,pvAcc=0;const apa=evl?evl.apa:.95,evPerW=apa*(opt.evm==='pct'?opt.evp/100:evl?evl.share:.078);
  for(const g of merged){const x=g.xs/g.k,y=g.ys/g.k;let i=clamp(Math.round((x-bx0)/cell),0,n-1),j=clamp(Math.round((by1-y)/cell),0,n-1);
   if(used.has(i+','+j)){let best=null,bd=1e9;for(let a=0;a<n;a++)for(let c=0;c<n;c++){if(used.has(a+','+c))continue;const d=(a-i)**2+(c-j)**2;if(d<bd){bd=d;best=[a,c]}}if(!best)continue;[i,j]=best}
   used.add(i+','+j);const bj=Math.round(g.bjs/g.ws)||0,lab=g.lab||labelFromYear(bj),rs=Math.round(Math.min(1,g.rl/g.nu)*100),lsrc=rs?`label ${lab}: ${rs}% geregistreerd (EP-Online via RIVM), rest geschat uit bouwjaar`:`label ${lab} geschat uit bouwjaar`,st=Object.entries(g.streets).sort((a,b)=>b[1]-a[1])[0],sn=st?st[0]:'';
   const o=Object.assign({id:++id,type:g.type,i,j},TYPES[g.type].d);
   if(TYPES[g.type].cat==='w'){o.aantal=g.aantal;o.m2=Math.round(g.m2s/g.aantal)||80;o.label=lab;o.verw=opt.wp&&bj>=2015?'wp_lucht':'gas';
-   lpAcc+=g.aantal*opt.lp/100;o.lp=Math.floor(lpAcc);lpAcc-=o.lp;pvAcc+=g.aantal*opt.pv/100;const npv=Math.floor(pvAcc);pvAcc-=npv;o.pv=Math.round(npv*(g.type==='app'?1:3.5)*10)/10;
+   lpAcc+=g.aantal*evPerW;o.lp=Math.floor(lpAcc);lpAcc-=o.lp;o.evkwh=3500;pvAcc+=g.aantal*opt.pv/100;const npv=Math.floor(pvAcc);pvAcc-=npv;o.pv=Math.round(npv*(g.type==='app'?1:3.5)*10)/10;
    o.name=(g.type==='app'?'Flat ':g.type==='vrij'?'Huis ':'Rij ')+(sn||'zonder straat')+(bj?` (${bj})`:'');
    o.src=`${g.aantal} woningen, gemiddeld ${o.m2} m², bouwjaar ≈ ${bj||'onbekend'}; ${lsrc}`}
   else{o.m2=Math.round(g.m2s);o.func=g.func;o.label=lab;o.verw='gas';o.pv=0;o.lp=0;o.name=g.nm+(sn?' '+sn:'');o.src=`${nf.format(o.m2)} m² ${g.nm.toLowerCase()} uit de BAG, bouwjaar ≈ ${bj||'onbekend'}; ${lsrc}`}
   objs.push(o)}
  const nw=objs.reduce((s,o)=>s+(TYPES[o.type].cat==='w'?o.aantal:0),0),grid=TRAFO[code]||null;
- return{v:2,n,trafo:grid?grid[1]:Math.max(400,Math.ceil(nw/120)*400),strat:state.strat||'ongestuurd',nbkw:state.nbkw??4,buurt:{code,naam,gemeente,vbo:nV,lab:labels?Object.keys(labels).length:null},grid,objs}}
+ return{v:2,n,trafo:grid?grid[1]:Math.max(400,Math.ceil(nw/120)*400),strat:state.strat||'ongestuurd',nbkw:state.nbkw??4,buurt:{code,naam,gemeente,vbo:nV,lab:labels?Object.keys(labels).length:null,ev:{share:evl?evl.share:.078,apa,msr:evl?evl.n:0,mode:opt.evm,pct:opt.evp}},grid,objs}}
 window.__buurtlab={buildFromBag,get state(){return state},get R(){return R},recompute,setState};
 
 
@@ -480,6 +489,7 @@ $('#t-kies').onclick=()=>showTab('kies');$('#t-lab').onclick=()=>showTab('lab');
 document.querySelector('.tabs').addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key==='ArrowLeft'){const lab=$('#t-kies').getAttribute('aria-selected')==='true';showTab(lab?'lab':'kies');$(lab?'#t-lab':'#t-kies').focus()}});
 $('#start-leeg').onclick=()=>{setState({v:2,n:10,trafo:400,strat:state.strat,nbkw:state.nbkw,objs:[]});showTab('lab')};
 $('#start-vb').onclick=()=>{setState(SAMPLE());showTab('lab')};$('#start-door').onclick=()=>showTab('lab');
+$('#imp-evm').onchange=e=>{$('#imp-evp-w').hidden=e.target.value!=='pct'};
 let map=null,bLayer=null,selLayer=null,mapT,lastBB='';
 function initMap(){
  if(map||!window.L){if(!window.L)$('#map-hint').textContent='De kaart kon niet laden. Zoeken op naam of buurtcode werkt wel.';else map.invalidateSize();return}
@@ -505,7 +515,8 @@ async function choose(pk,zoom,feat){
   row('Inwoners',p.aantal_inwoners!=null&&p.aantal_inwoners>=0?nf.format(p.aantal_inwoners):null)+row('Huishoudens',p.aantal_huishoudens!=null&&p.aantal_huishoudens>=0?nf.format(p.aantal_huishoudens):null)+
   row('Oppervlakte land',p.oppervlakte_land_in_ha!=null?nf.format(p.oppervlakte_land_in_ha)+' ha':null)+
   (g?row("Trafo's (Liander)",g[0])+row('Capaciteit',nf.format(g[1])+' kW')+row('NBL-limiet',nf.format(g[2])+' kW')+row('Som gemeten pieken',nf.format(g[3])+' kW'):'')+
-  `</dl>${g?'':'<p class="note" style="margin:8px 0 0">Geen trafodata voor deze buurt; de netcapaciteit wordt geschat.</p>'}`}
+  `</dl>${g?'':'<p class="note" style="margin:8px 0 0">Geen trafodata voor deze buurt; de netcapaciteit wordt geschat.</p>'}`;
+ if(feat&&feat.geometry){await evData();const gm=feat.geometry,e=evLocal(gm.type==='Polygon'?[gm.coordinates]:gm.coordinates);if(pick_===pk&&!e)$('#bcard dl').insertAdjacentHTML('beforeend',row("EV-aandeel auto's",'geen SlimLaden-data'));if(e&&pick_===pk)$('#bcard dl').insertAdjacentHTML('beforeend',row("EV-aandeel auto's (SlimLaden)",nf1.format(e.share*100)+'%')+row("Auto's per adres",nf1.format(e.apa))+row("Gebaseerd op",e.n+" MSR's"))}}
 
 /* ---------- start ---------- */
 syncControls();setHint();renderName();renderEditor();

@@ -114,9 +114,10 @@ textarea{width:100%;min-height:140px;font:13px/1.4 ui-monospace,monospace;paddin
     <div id="imp-sug" class="sug" role="listbox" aria-label="Gevonden buurten"></div>
     <div class="card" id="bcard"><p class="note">Nog geen buurt gekozen.</p></div>
     <div class="two">
-      <label class="fld"><span>Woningen met laadpaal (%)</span><input id="imp-lp" type="number" min="0" max="100" value="20"></label>
-      <label class="fld"><span>Woningen met zonnepanelen (%)</span><input id="imp-pv" type="number" min="0" max="100" value="30"></label>
+      <label class="fld"><span>Elektrische auto's</span><select id="imp-evm"><option value="data">Huidig, schatting SlimLaden</option><option value="pct">Scenario: % van de auto's</option></select></label>
+      <label class="fld" id="imp-evp-w" hidden><span>Aandeel elektrisch (%)</span><input id="imp-evp" type="number" min="0" max="100" value="50"></label>
     </div>
+    <div class="two"><label class="fld"><span>Woningen met zonnepanelen (%)</span><input id="imp-pv" type="number" min="0" max="100" value="30"></label></div>
     <label class="chk"><input id="imp-wp" type="checkbox" checked> Woningen vanaf bouwjaar 2015 met warmtepomp, de rest met cv-ketel</label>
     <div class="acts" style="margin-top:12px"><button class="btn prim" id="imp-go" disabled>Importeren en ontwerpen</button></div>
     <p class="note" id="imp-st" role="status"></p>
@@ -188,6 +189,7 @@ textarea{width:100%;min-height:140px;font:13px/1.4 ui-monospace,monospace;paddin
     <li>Dynamisch slim laden verdeelt de energie van elke sessie over de kwartieren met de laagste buurtbelasting binnen de verblijfsduur (valley filling). Netbewust laden begrenst het vermogen tussen 16 en 21 uur.</li>
     <li>Batterij: rendement 96% per richting, SoC 10–90%, start op 50%. Peak shaving ontlaadt boven het doel en laadt bij voldoende ruimte eronder. Eigen verbruik laadt bij teruglevering. Prijs laadt onder het daggemiddelde van de day-ahead-prijs 2024 en ontlaadt erboven.</li>
     <li>Energielabels: RVO EP-Online via de RIVM-dienst <code>rvo_energielabels</code>, per BAG-pand het dominante label. Per blok wordt het meest voorkomende label gebruikt; het aandeel geregistreerde labels staat bij het blok. Zonder label: schatting uit bouwjaar (vóór 1946 E/F/G, 1946–1974 D, 1975–1991 C, 1992–2005 B, 2006–2014 A, vanaf 2015 A+).</li>
+    <li>Elektrische auto's: schatting per MSR uit SlimLaden (LIEV WP4). Per buurt wordt het EV-aandeel van de personenauto's genomen van de MSR's waarvan het zwaartepunt in de buurt ligt, en het aantal auto's per adres van de MSR's met een volledige adreslijst (anders 0,95). Elke EV krijgt een laadpunt met thuispatroon en 3.500 kWh per jaar, zoals in SlimLaden.</li>
     <li>Trafodata: Liander-transformatoren per buurtcode (capaciteit, NBL-limiet, gemeten piek 2025). Het voedingsgebied van een trafo valt niet precies samen met de buurtgrens, en de som van de gemeten pieken is niet gelijktijdig. Gebruik het als ordegrootte.</li>
   </ul></details>
   <details id="jdet"><summary>Opslaan en laden (JSON)</summary>

@@ -29,6 +29,7 @@ Blokken in dezelfde rastercel en met hetzelfde label worden samengevoegd, en het
 - `index.html`: opmaak
 - `app.js`: model, 3D (Three.js via CDN), editor en import
 - `profielen/profielen_2024.csv`: kwartierprofielen (gemiddelde = 1), temperatuur en day-ahead-prijs
+- `profielen/ev_msr.json`: per MSR uit SlimLaden `[lon, lat, adrespunten (max 100), EV's, personenauto's]`
 - `profielen/trafos_liander.json`: per buurtcode `[aantal trafo's, capaciteit kW, NBL kW, som gemeten pieken kW]`
 
 ## Lokaal draaien
