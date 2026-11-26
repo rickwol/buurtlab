@@ -380,6 +380,8 @@ const LS='https://api.pdok.nl/bzk/locatieserver/search/v3_1/free',BAG='https://a
  CBS=y=>`https://api.pdok.nl/cbs/wijken-en-buurten-${y}/ogc/v1/collections/buurten/items`;
 const UTIL={winkelfunctie:['winkel','winkel','Winkels'],bijeenkomstfunctie:['kantoor','sport','Bijeenkomst'],kantoorfunctie:['kantoor','kantoor','Kantoren'],gezondheidszorgfunctie:['kantoor','kantoor','Zorg'],
  onderwijsfunctie:['kantoor','onderwijs','School'],logiesfunctie:['kantoor','logies','Logies'],sportfunctie:['kantoor','sport','Sport'],celfunctie:['kantoor','logies','Cellen'],industriefunctie:['fabriek','industrie','Bedrijven']};
+const RIVM='https://data.rivm.nl/geo/nl/wfs';
+const mapLab=v=>{v=String(v||'').toUpperCase().trim();return /^A\+/.test(v)?'A+':v==='A'?'A':v==='B'?'B':v==='C'?'C':v==='D'?'D':/^[EFG]$/.test(v)?'EFG':null};
 const labelFromYear=y=>!y||y<1946?'EFG':y<1975?'D':y<1992?'C':y<2006?'B':y<2015?'A':'A+';
 const ist=t=>{$('#imp-st').textContent=t};
 async function getJSON(u){const r=await fetch(u,{headers:{Accept:'application/geo+json, application/json'}});if(!r.ok)throw new Error('HTTP '+r.status+' van '+new URL(u).host);return r.json()}
@@ -398,7 +400,7 @@ $('#imp-q').addEventListener('input',e=>{const q=e.target.value.trim();pick_=nul
    $('#imp-sug').querySelectorAll('button').forEach(x=>x.setAttribute('aria-selected',x===b));choose({code:d.buurtcode,naam:d.buurtnaam||d.weergavenaam,gemeente:d.gemeentenaam||''},true)}}
   catch(err){$('#imp-sug').innerHTML=`<p class="note">Zoeken lukt niet (${esc(err.message)}). Vul de buurtcode in, bijv. BU03440420.</p>`}},250)});
 $('#imp-go').onclick=async()=>{if(!pick_)return;const b=$('#imp-go');b.disabled=true;
- try{const s=await importBuurt(pick_,{lp:+$('#imp-lp').value||0,pv:+$('#imp-pv').value||0,wp:$('#imp-wp').checked});setState(s);ist(`Klaar: ${nf.format(s.buurt.vbo)} verblijfsobjecten samengevoegd tot ${s.objs.length} blokken op een grid van ${s.n}×${s.n}.`);showTab('lab')}
+ try{const s=await importBuurt(pick_,{lp:+$('#imp-lp').value||0,pv:+$('#imp-pv').value||0,wp:$('#imp-wp').checked});setState(s);ist(`Klaar: ${nf.format(s.buurt.vbo)} verblijfsobjecten samengevoegd tot ${s.objs.length} blokken op een grid van ${s.n}×${s.n}. `+(s.buurt.lab==null?'Energielabels konden niet worden opgehaald; alle labels zijn geschat uit het bouwjaar.':`Geregistreerde energielabels gevonden voor ${nf.format(s.buurt.lab)} panden.`));showTab('lab')}
  catch(err){ist('Importeren mislukt: '+err.message+(location.protocol==='file:'?' Open Buurtlab via een webserver.':' Werkt het hier niet, gebruik dan rickwol.github.io/buurtlab.'))}
  b.disabled=false};
 async function importBuurt(pk,opt){
@@ -410,9 +412,13 @@ async function importBuurt(pk,opt){
  const bb=[x0,y0,x1,y1].map(v=>v.toFixed(6)).join(',');
  const vbos=await allItems(`${BAG}verblijfsobject/items?f=json&limit=1000&bbox=${bb}`,'Verblijfsobjecten');
  const pands=await allItems(`${BAG}pand/items?f=json&limit=1000&bbox=${bb}`,'Panden');
+ ist('Energielabels ophalen bij RIVM…');let labels=null;
+ try{const j=await getJSON(`${RIVM}?service=WFS&version=1.0.0&request=GetFeature&typeName=nl:rvo_energielabels&outputFormat=application/json&maxFeatures=50000&bbox=${bb}&propertyName=identificatie,dominant_label,aant_labels`);
+  labels={};for(const f of j.features||[]){const p=f.properties||{},l=mapLab(p.dominant_label);if(l)labels[pid(p.identificatie)]={l,n:+p.aant_labels||1}}}catch(e){labels=null}
  ist('Gebouwen samenvoegen…');
- return buildFromBag({polys,vbos,pands,code:pk.code,naam:pr.buurtnaam||pk.naam,gemeente:pr.gemeentenaam||pk.gemeente,opt})}
-function buildFromBag({polys,vbos,pands,code,naam,gemeente,opt}){
+ return buildFromBag({polys,vbos,pands,labels,code:pk.code,naam:pr.buurtnaam||pk.naam,gemeente:pr.gemeentenaam||pk.gemeente,opt})}
+function buildFromBag({polys,vbos,pands,labels,code,naam,gemeente,opt}){
+ const LB=id=>labels&&labels[id];
  const lat0=(polys[0][0].reduce((s,p)=>s+p[1],0))/polys[0][0].length,lon0=polys[0][0][0][0],kx=111320*Math.cos(lat0*Math.PI/180),ky=110574;
  const XY=([lo,la])=>[(lo-lon0)*kx,(la-lat0)*ky];
  const bad=/ingetrokken|niet gerealiseerd|ten onrechte|gesloopt/i;
@@ -428,9 +434,10 @@ function buildFromBag({polys,vbos,pands,code,naam,gemeente,opt}){
  for(const id in byP){const B=byP[id],P_=pmap[id],bj=P_?+P_.pr.bouwjaar:0,ring=P_&&P_.geo.type==='Polygon'?P_.geo.coordinates[0]:P_&&P_.geo.type==='MultiPolygon'?P_.geo.coordinates[0][0]:null;
   const cen=ring?XY([ring.reduce((s,p)=>s+p[0],0)/ring.length,ring.reduce((s,p)=>s+p[1],0)/ring.length]):XY(B.pt);
   const street=Object.entries(B.str).sort((a,b)=>b[1]-a[1])[0];
-  if(B.w>=4)blocks.push({type:'app',aantal:B.w,m2:B.wm2/B.w,bj,x:cen[0],y:cen[1],street:street&&street[0]});
-  else if(B.w>0)single.push({id,w:B.w,m2:B.wm2,bj,x:cen[0],y:cen[1],ring,street:street&&street[0]});
-  for(const gd in B.u){const m2=B.u[gd];if(m2<30)continue;const[t,fn,nm]=UTIL[gd];blocks.push({type:t,func:fn,m2,bj,x:cen[0],y:cen[1],street:street&&street[0],nm})}}
+  const lb=LB(id),lab=lb?lb.l:labelFromYear(bj),real=lb?Math.min(lb.n,Math.max(1,B.w)):0;
+  if(B.w>=4)blocks.push({type:'app',aantal:B.w,m2:B.wm2/B.w,bj,lab,real,x:cen[0],y:cen[1],street:street&&street[0]});
+  else if(B.w>0)single.push({id,w:B.w,m2:B.wm2,bj,lab,real,x:cen[0],y:cen[1],ring,street:street&&street[0]});
+  for(const gd in B.u){const m2=B.u[gd];if(m2<30)continue;const[t,fn,nm]=UTIL[gd];blocks.push({type:t,func:fn,m2,bj,lab,real:lb?1:0,x:cen[0],y:cen[1],street:street&&street[0],nm})}}
  const parent=single.map((_,k)=>k),find=k=>{while(parent[k]!==k){parent[k]=parent[parent[k]];k=parent[k]}return k};
  const vmap=new Map();single.forEach((s,k)=>{if(!s.ring)return;const seen=new Set();for(const[x,y]of s.ring){const key=x.toFixed(6)+','+y.toFixed(6);if(seen.has(key))continue;seen.add(key);const l=vmap.get(key);if(l)l.push(k);else vmap.set(key,[k])}});
  const pairs=new Map();for(const l of vmap.values())for(let a=0;a<l.length;a++)for(let b=a+1;b<l.length;b++){const key=l[a]<l[b]?l[a]+'|'+l[b]:l[b]+'|'+l[a];pairs.set(key,(pairs.get(key)||0)+1)}
@@ -438,30 +445,31 @@ function buildFromBag({polys,vbos,pands,code,naam,gemeente,opt}){
  const cl={};single.forEach((s,k)=>{(cl[find(k)]=cl[find(k)]||[]).push(s)});
  for(const k in cl){let m=cl[k];const xs=m.map(s=>s.x),ys=m.map(s=>s.y);const ax=Math.max(...xs)-Math.min(...xs)>=Math.max(...ys)-Math.min(...ys)?'x':'y';m.sort((a,b)=>a[ax]-b[ax]);
   for(let c=0;c<m.length;c+=10){const ch=m.slice(c,c+10),w=ch.reduce((s,a)=>s+a.w,0),m2=ch.reduce((s,a)=>s+a.m2,0),bj=Math.round(ch.reduce((s,a)=>s+a.bj*a.w,0)/w);
-   const st={};ch.forEach(a=>{if(a.street)st[a.street]=(st[a.street]||0)+a.w});const street=Object.entries(st).sort((a,b)=>b[1]-a[1])[0];
-   blocks.push({type:w<=2&&ch.length<=2?'vrij':'rij',aantal:w,m2:m2/w,bj,x:ch.reduce((s,a)=>s+a.x,0)/ch.length,y:ch.reduce((s,a)=>s+a.y,0)/ch.length,street:street&&street[0]})}}
+   const st={},lv={};ch.forEach(a=>{if(a.street)st[a.street]=(st[a.street]||0)+a.w;lv[a.lab]=(lv[a.lab]||0)+a.w});const street=Object.entries(st).sort((a,b)=>b[1]-a[1])[0];
+   const lab=Object.entries(lv).sort((a,b)=>b[1]-a[1])[0][0],real=ch.reduce((s,a)=>s+a.real,0);
+   blocks.push({type:w<=2&&ch.length<=2?'vrij':'rij',aantal:w,m2:m2/w,bj,lab,real,x:ch.reduce((s,a)=>s+a.x,0)/ch.length,y:ch.reduce((s,a)=>s+a.y,0)/ch.length,street:street&&street[0]})}}
  if(!blocks.length)throw new Error('geen gebouwen gevonden in deze buurt.');
  let bx0=Infinity,by0=Infinity,bx1=-Infinity,by1=-Infinity;for(const b of blocks){bx0=Math.min(bx0,b.x);bx1=Math.max(bx1,b.x);by0=Math.min(by0,b.y);by1=Math.max(by1,b.y)}
  const span=Math.max(bx1-bx0,by1-by0,50);let n=clamp(Math.ceil(span/50)+1,8,24),merged;
  for(let f=1;;f++){const cell=span/(n-1)*f,grp={};
-  for(const b of blocks){const lab=labelFromYear(b.bj),ci=Math.floor((b.x-bx0)/cell),cj=Math.floor((by1-b.y)/cell);
-   const key=[b.type,b.func||'',b.type==='rij'||b.type==='vrij'||b.type==='app'?lab:'',ci,cj].join('|');const g=grp[key]=grp[key]||{...b,aantal:0,m2s:0,bjs:0,ws:0,xs:0,ys:0,k:0,streets:{}};
+  for(const b of blocks){const lab=b.lab,ci=Math.floor((b.x-bx0)/cell),cj=Math.floor((by1-b.y)/cell);
+   const key=[b.type,b.func||'',b.type==='rij'||b.type==='vrij'||b.type==='app'?lab:'',ci,cj].join('|');const g=grp[key]=grp[key]||{...b,aantal:0,m2s:0,bjs:0,ws:0,xs:0,ys:0,k:0,streets:{},rl:0,nu:0};g.rl+=b.real||0;g.nu+=b.aantal||1;
    const w=b.aantal||1;g.aantal+=b.aantal||0;g.m2s+=b.aantal?b.m2*b.aantal:b.m2;g.bjs+=(b.bj||0)*w;g.ws+=w;g.xs+=b.x;g.ys+=b.y;g.k++;if(b.street)g.streets[b.street]=(g.streets[b.street]||0)+w}
   merged=Object.values(grp);if(merged.length<=n*n*.8||f>6)break}
  const objs=[],used=new Set();let id=0;merged.sort((a,b)=>(b.aantal||b.m2s/100)-(a.aantal||a.m2s/100));
  const cell=span/(n-1);let lpAcc=0,pvAcc=0;
  for(const g of merged){const x=g.xs/g.k,y=g.ys/g.k;let i=clamp(Math.round((x-bx0)/cell),0,n-1),j=clamp(Math.round((by1-y)/cell),0,n-1);
   if(used.has(i+','+j)){let best=null,bd=1e9;for(let a=0;a<n;a++)for(let c=0;c<n;c++){if(used.has(a+','+c))continue;const d=(a-i)**2+(c-j)**2;if(d<bd){bd=d;best=[a,c]}}if(!best)continue;[i,j]=best}
-  used.add(i+','+j);const bj=Math.round(g.bjs/g.ws)||0,lab=labelFromYear(bj),st=Object.entries(g.streets).sort((a,b)=>b[1]-a[1])[0],sn=st?st[0]:'';
+  used.add(i+','+j);const bj=Math.round(g.bjs/g.ws)||0,lab=g.lab||labelFromYear(bj),rs=Math.round(Math.min(1,g.rl/g.nu)*100),lsrc=rs?`label ${lab}: ${rs}% geregistreerd (EP-Online via RIVM), rest geschat uit bouwjaar`:`label ${lab} geschat uit bouwjaar`,st=Object.entries(g.streets).sort((a,b)=>b[1]-a[1])[0],sn=st?st[0]:'';
   const o=Object.assign({id:++id,type:g.type,i,j},TYPES[g.type].d);
   if(TYPES[g.type].cat==='w'){o.aantal=g.aantal;o.m2=Math.round(g.m2s/g.aantal)||80;o.label=lab;o.verw=opt.wp&&bj>=2015?'wp_lucht':'gas';
    lpAcc+=g.aantal*opt.lp/100;o.lp=Math.floor(lpAcc);lpAcc-=o.lp;pvAcc+=g.aantal*opt.pv/100;const npv=Math.floor(pvAcc);pvAcc-=npv;o.pv=Math.round(npv*(g.type==='app'?1:3.5)*10)/10;
    o.name=(g.type==='app'?'Flat ':g.type==='vrij'?'Huis ':'Rij ')+(sn||'zonder straat')+(bj?` (${bj})`:'');
-   o.src=`${g.aantal} woningen, gemiddeld ${o.m2} m², bouwjaar ≈ ${bj||'onbekend'}, label geschat ${lab}`}
-  else{o.m2=Math.round(g.m2s);o.func=g.func;o.label=lab;o.verw='gas';o.pv=0;o.lp=0;o.name=g.nm+(sn?' '+sn:'');o.src=`${nf.format(o.m2)} m² ${g.nm.toLowerCase()} uit de BAG, bouwjaar ≈ ${bj||'onbekend'}`}
+   o.src=`${g.aantal} woningen, gemiddeld ${o.m2} m², bouwjaar ≈ ${bj||'onbekend'}; ${lsrc}`}
+  else{o.m2=Math.round(g.m2s);o.func=g.func;o.label=lab;o.verw='gas';o.pv=0;o.lp=0;o.name=g.nm+(sn?' '+sn:'');o.src=`${nf.format(o.m2)} m² ${g.nm.toLowerCase()} uit de BAG, bouwjaar ≈ ${bj||'onbekend'}; ${lsrc}`}
   objs.push(o)}
  const nw=objs.reduce((s,o)=>s+(TYPES[o.type].cat==='w'?o.aantal:0),0),grid=TRAFO[code]||null;
- return{v:2,n,trafo:grid?grid[1]:Math.max(400,Math.ceil(nw/120)*400),strat:state.strat||'ongestuurd',nbkw:state.nbkw??4,buurt:{code,naam,gemeente,vbo:nV},grid,objs}}
+ return{v:2,n,trafo:grid?grid[1]:Math.max(400,Math.ceil(nw/120)*400),strat:state.strat||'ongestuurd',nbkw:state.nbkw??4,buurt:{code,naam,gemeente,vbo:nV,lab:labels?Object.keys(labels).length:null},grid,objs}}
 window.__buurtlab={buildFromBag,get state(){return state},get R(){return R},recompute,setState};
 
 

@@ -109,7 +109,7 @@ textarea{width:100%;min-height:140px;font:13px/1.4 ui-monospace,monospace;paddin
   <div class="mapwrap"><div id="map" aria-label="Kaart van Nederland met CBS-buurten"></div><p class="hint" id="map-hint">Zoom in tot de buurtgrenzen verschijnen en klik op een buurt. Blauw omlijnde buurten hebben trafodata van Liander.</p></div>
   <div class="kpanel">
     <h2>Kies een buurt</h2>
-    <p class="note">Zoek of klik op de kaart. Buurtlab haalt de CBS-buurtgrens en alle gebouwen uit de BAG op (Kadaster, via PDOK). Aaneengesloten woningen worden één rij, woongebouwen worden appartementen, winkels, kantoren, scholen en bedrijven worden utiliteit. Het label wordt geschat uit het bouwjaar.</p>
+    <p class="note">Zoek of klik op de kaart. Buurtlab haalt de CBS-buurtgrens en alle gebouwen uit de BAG op (Kadaster, via PDOK). Aaneengesloten woningen worden één rij, woongebouwen worden appartementen, winkels, kantoren, scholen en bedrijven worden utiliteit. Energielabels komen uit EP-Online (via de RIVM-kaartdienst, per pand het meest voorkomende label); waar geen label geregistreerd is, schat Buurtlab het uit het bouwjaar.</p>
     <label class="fld"><span>Buurt: naam met gemeente, of buurtcode (bijv. "Lombok Utrecht" of BU03440420)</span><input id="imp-q" type="search" autocomplete="off" placeholder="Zoek een buurt"></label>
     <div id="imp-sug" class="sug" role="listbox" aria-label="Gevonden buurten"></div>
     <div class="card" id="bcard"><p class="note">Nog geen buurt gekozen.</p></div>
@@ -187,6 +187,7 @@ textarea{width:100%;min-height:140px;font:13px/1.4 ui-monospace,monospace;paddin
     <li>Laden met losse sessies per laadpunt (thuis, werk, publiek) met vaste seed, zodat de gelijktijdigheid bij kleine aantallen klopt. De ElaadNL-opties schalen in plaats daarvan het gemiddelde landelijke profiel, net als SlimLaden. Bij grote aantallen komen beide uit op hetzelfde, bij kleine aantallen geeft het gemiddelde profiel een te lage piek.</li>
     <li>Dynamisch slim laden verdeelt de energie van elke sessie over de kwartieren met de laagste buurtbelasting binnen de verblijfsduur (valley filling). Netbewust laden begrenst het vermogen tussen 16 en 21 uur.</li>
     <li>Batterij: rendement 96% per richting, SoC 10–90%, start op 50%. Peak shaving ontlaadt boven het doel en laadt bij voldoende ruimte eronder. Eigen verbruik laadt bij teruglevering. Prijs laadt onder het daggemiddelde van de day-ahead-prijs 2024 en ontlaadt erboven.</li>
+    <li>Energielabels: RVO EP-Online via de RIVM-dienst <code>rvo_energielabels</code>, per BAG-pand het dominante label. Per blok wordt het meest voorkomende label gebruikt; het aandeel geregistreerde labels staat bij het blok. Zonder label: schatting uit bouwjaar (vóór 1946 E/F/G, 1946–1974 D, 1975–1991 C, 1992–2005 B, 2006–2014 A, vanaf 2015 A+).</li>
     <li>Trafodata: Liander-transformatoren per buurtcode (capaciteit, NBL-limiet, gemeten piek 2025). Het voedingsgebied van een trafo valt niet precies samen met de buurtgrens, en de som van de gemeten pieken is niet gelijktijdig. Gebruik het als ordegrootte.</li>
   </ul></details>
   <details id="jdet"><summary>Opslaan en laden (JSON)</summary>

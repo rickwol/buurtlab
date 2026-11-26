@@ -22,7 +22,7 @@ Zoekt een CBS-buurt op en haalt via PDOK de panden en verblijfsobjecten uit de B
 - Panden met 4 of meer woningen worden appartementen.
 - Utiliteit krijgt een object per functie.
 
-Blokken in dezelfde rastercel en met hetzelfde label worden samengevoegd, en het grid schaalt mee met de buurt. Het label wordt geschat uit het bouwjaar. In het Liander-gebied komen de trafocapaciteit, de NBL-limiet en de gemeten piek mee.
+Blokken in dezelfde rastercel en met hetzelfde label worden samengevoegd, en het grid schaalt mee met de buurt. Energielabels komen per pand uit EP-Online via de RIVM-dienst `rvo_energielabels`. Waar geen label geregistreerd is, schat Buurtlab het uit het bouwjaar. In het Liander-gebied komen de trafocapaciteit, de NBL-limiet en de gemeten piek mee.
 
 ## Bestanden
 
