@@ -92,6 +92,10 @@ textarea{width:100%;min-height:140px;font:13px/1.4 ui-monospace,monospace;paddin
 .labbar{display:flex;flex-wrap:wrap;gap:10px 24px;align-items:center;justify-content:space-between;padding:12px max(5vw,16px)}.labbar p{margin:0;color:var(--mute);max-width:80ch}
 .leaflet-container{font:inherit}
 @media(max-width:900px){.kies{grid-template-columns:minmax(0,1fr)}.mapwrap{height:56vh}.kpanel{border-left:0;max-height:none}}
+.trf{padding-bottom:0}.trf h2{font-size:clamp(22px,2.4vw,28px);margin-bottom:6px}.scroll{overflow-x:auto}
+table.tt{width:100%;border-collapse:collapse;font-size:15px;margin:8px 0}.tt th{text-align:left;font-size:13px;color:var(--mute);font-weight:500;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+.tt td{padding:8px 10px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums;white-space:nowrap}.tt td:not(:first-child),.tt th:not(:first-child){text-align:right}.tt tbody tr{cursor:pointer}.tt tbody tr:hover{background:var(--soft)}
+.sw{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:8px;vertical-align:-1px}.lb{display:inline-block;width:80px;height:10px;background:var(--soft);border-radius:5px;overflow:hidden;margin-right:8px;vertical-align:0}.lb i{display:block;height:100%}
 @media(max-width:900px){.app{grid-template-columns:minmax(0,1fr)}.side{border-left:0;max-height:none}.stage{height:62vh}.charts,.who,.imp-in{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:600px){.tool{min-width:60px;font-size:12px}.cb{grid-template-columns:minmax(0,8em) minmax(0,1fr) 4.8em}.hint{font-size:13px}}
 @media(prefers-reduced-motion:reduce){.meter i{transition:none}}
@@ -132,7 +136,7 @@ textarea{width:100%;min-height:140px;font:13px/1.4 ui-monospace,monospace;paddin
   <section class="stage" aria-label="3D-buurt">
     <div id="view"></div>
     <div class="hint" id="hint"></div>
-    <div class="vbtn"><button class="btn" id="heatmap" aria-pressed="false">Kleur op piekbijdrage</button></div>
+    <div class="vbtn"><button class="btn" id="tmap" aria-pressed="false" hidden>Kleur per trafo</button><button class="btn" id="heatmap" aria-pressed="false">Kleur op piekbijdrage</button></div>
     <div class="bar" id="bar" role="toolbar" aria-label="Bouwbalk"></div>
     <div class="load" id="loading">Kwartierprofielen 2024 laden…</div>
   </section>
@@ -174,6 +178,11 @@ textarea{width:100%;min-height:140px;font:13px/1.4 ui-monospace,monospace;paddin
     <div class="leg"><span>Netto belasting per kwartier, gesorteerd van hoog naar laag</span></div>
     <div class="fig" id="f-ldc"><svg role="img" aria-label="Jaarduurkromme"></svg></div>
   </div>
+</section>
+<section class="band trf" id="trafos" hidden>
+  <h2>Belasting per trafo</h2><p class="note" id="trafo-sub"></p>
+  <div class="scroll"><table class="tt"><thead><tr><th>Trafo</th><th>Objecten / woningen</th><th>Piek model (kW)</th><th>Capaciteit (kW)</th><th>Gemeten piek (kW)</th><th>Belasting</th></tr></thead><tbody id="trafo-rows"></tbody></table></div>
+  <p class="note">Toewijzing van gebouwen aan trafo's volgens de adrespunten per MSR uit SlimLaden; capaciteit, NBL en gemeten piek van het dichtstbijzijnde Liander-station (binnen 200 m). Klik op een trafo om hem aan te passen.</p>
 </section>
 <section class="band who">
   <div><h2>Wie bepaalt de piek?</h2><p class="note" id="who-sub"></p><div id="contrib"></div></div>

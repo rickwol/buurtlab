@@ -22,7 +22,7 @@ Zoekt een CBS-buurt op en haalt via PDOK de panden en verblijfsobjecten uit de B
 - Panden met 4 of meer woningen worden appartementen.
 - Utiliteit krijgt een object per functie.
 
-Blokken in dezelfde rastercel en met hetzelfde label worden samengevoegd, en het grid schaalt mee met de buurt. Energielabels komen per pand uit EP-Online via de RIVM-dienst `rvo_energielabels`. Waar geen label geregistreerd is, schat Buurtlab het uit het bouwjaar. In het Liander-gebied komen de trafocapaciteit, de NBL-limiet en de gemeten piek mee.
+Blokken in dezelfde rastercel en met hetzelfde label worden samengevoegd, en het grid schaalt mee met de buurt. Energielabels komen per pand uit EP-Online via de RIVM-dienst `rvo_energielabels`. Waar geen label geregistreerd is, schat Buurtlab het uit het bouwjaar. Elk blok wordt gekoppeld aan de MSR waarvan een aangesloten adrespunt het dichtst bij ligt (uit SlimLaden). De trafo's komen als huisjes in 3D, met kleuring per trafo en de belasting per trafo. In het Liander-gebied komen per trafo de capaciteit, de NBL-limiet en de gemeten piek mee. Bij een eigen ontwerp kun je zelf trafo's toevoegen en gebouwen toewijzen.
 
 ## Bestanden
 
@@ -30,6 +30,7 @@ Blokken in dezelfde rastercel en met hetzelfde label worden samengevoegd, en het
 - `app.js`: model, 3D (Three.js via CDN), editor en import
 - `profielen/profielen_2024.csv`: kwartierprofielen (gemiddelde = 1), temperatuur en day-ahead-prijs
 - `profielen/ev_msr.json`: per MSR uit SlimLaden `[lon, lat, adrespunten (max 100), EV's, personenauto's]`
+- `profielen/msr/{lon*20}_{lat*20}.json`: MSR's per kaarttegel `[id, lon·1e5, lat·1e5, capaciteit kW, NBL kW, gemeten piek kW, naam, aantal transformatoren, adrespunten als offsets]`, uit SlimLaden gekoppeld aan het dichtstbijzijnde Liander-station (≤200 m)
 - `profielen/trafos_liander.json`: per buurtcode `[aantal trafo's, capaciteit kW, NBL kW, som gemeten pieken kW]`
 
 ## Lokaal draaien

@@ -124,7 +124,9 @@ const SAMPLE=()=>{let id=0;const mk=(type,i,j,x)=>Object.assign({id:++id,type,i,
 const KEY='buurtlab-v2';
 let state;try{state=JSON.parse(localStorage.getItem(KEY))}catch(e){}
 if(!state||state.v!==2||!Array.isArray(state.objs))state=SAMPLE();
-let sel=null,tool=null,moving=false,heatOn=false,R=null;
+let sel=null,selT=null,tool=null,moving=false,cmode='normaal',R=null;
+const TCOL=['#1f5eff','#de5129','#2a9d4b','#8e44d6','#e0a400','#0f9fb5','#c2185b','#795548','#3f51b5','#7cb342','#ff7043','#26a69a'];
+const trafos=()=>state.trafos||[],tById=id=>trafos().find(t=>t.id===id),tCol=t=>TCOL[trafos().indexOf(t)%TCOL.length];
 const hist=[JSON.stringify(state)];
 const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}};
 function commit(){const j=JSON.stringify(state);if(hist[hist.length-1]!==j){hist.push(j);if(hist.length>40)hist.shift()}save()}
@@ -160,9 +162,12 @@ function recompute(){
  let pk=0,pki=0,mn=0,yr=0,refPk=0;const ref=new Float32Array(Q);
  for(let q=0;q<Q;q++){const v=L[q];if(v>pk){pk=v;pki=q}if(v<mn)mn=v;if(v>0)yr+=v*DT;ref[q]=L0[q]+evRef[q];if(ref[q]>refPk)refPk=ref[q]}
  const sorted=L.slice().sort().reverse(),sref=ref.slice().sort().reverse(),tr=state.trafo||400;let above=0;for(const v of L)if(v>tr)above++;
- const pd=Math.floor(pki/QD);
- R={...T,net:L,ref,pk,pki,exp:-mn,yr,sorted,sref,per,sumPk,above,trafo:tr,refPk,wStart:clamp((pd-3)*QD,0,Q-7*QD)};
- renderKpi();drawWeek();drawLdc();renderWho();tint();if(sel)renderEditor(true)}
+ const pd=Math.floor(pki/QD),TR=[];
+ if(trafos().length){const groups_={};for(const t of trafos())groups_[t.id]={t,s:new Float32Array(Q),no:0,nw:0};const un={t:{id:'',name:'Niet toegewezen',cap:0},s:new Float32Array(Q),no:0,nw:0};
+  for(const o of objs){const g=groups_[o.msr]||un,a=per[o.id].net;g.no++;if(TYPES[o.type].cat==='w')g.nw+=o.aantal;for(let q=0;q<Q;q++)g.s[q]+=a[q]}
+  for(const g of [...Object.values(groups_),un]){if(!g.no&&g!==un&&false)continue;if(g===un&&!g.no)continue;let p=0,pi=0,ab=0;const c=+g.t.cap||0;for(let q=0;q<Q;q++){const v=g.s[q];if(v>p){p=v;pi=q}if(c&&v>c)ab++}TR.push({t:g.t,pk:p,pki:pi,above:ab,no:g.no,nw:g.nw})}}
+ R={...T,TR,net:L,ref,pk,pki,exp:-mn,yr,sorted,sref,per,sumPk,above,trafo:tr,refPk,wStart:clamp((pd-3)*QD,0,Q-7*QD)};
+ renderKpi();drawWeek();drawLdc();renderWho();renderTrafos();tint();if(sel)renderEditor(true);else if(selT)renderEditor()}
 let rt;const schedule=()=>{clearTimeout(rt);rt=setTimeout(recompute,150)};
 
 function renderKpi(){
@@ -258,6 +263,7 @@ function pick(e){const r=renderer.domElement.getBoundingClientRect();mouse.set((
 function hover(e){if(!tool&&!moving){ghost.visible=false;return}pick(e);const h=ray.intersectObjects(plots)[0];
  if(h){const t=h.object.userData.tile,free=!occ(t.i,t.j);ghost.visible=true;ghost.position.set(pos(t.i),2.3,pos(t.j));ghost.material.color.set(free?0xf5b700:0xc62828)}else ghost.visible=false}
 function click(e){pick(e);
+ if(kioskG&&!tool&&!moving){const hk=ray.intersectObjects(kioskG.children,true)[0];if(hk){let g=hk.object;while(g&&!g.userData.trafo)g=g.parent;if(g){selectT(g.userData.trafo);return}}}
  const hb=ray.intersectObjects(world.children,true)[0];
  if(hb&&!tool&&!moving){let g=hb.object;while(g&&!g.userData.id)g=g.parent;if(g){select(g.userData.id);return}}
  const ht=ray.intersectObjects(plots)[0];if(!ht)return;
@@ -305,11 +311,20 @@ function build(o){
  else{box(g,10,.12,10,mats.dark,0,.36,0);const n=Math.min(o.lp,16),per=Math.ceil(n/2);
   for(let k=0;k<n;k++){const row=k<per?-1:1,c=k<per?k:k-per,x=-4.2+c*(8.4/Math.max(1,per-1));box(g,.12,.02,3.2,mats.white,x+.6,.43,row*2.6);box(g,.45,1.5,.45,mats.post,x,1.1,row*4.2);box(g,.6,.25,.6,mats.acc,x,1.95,row*4.2)}
   g.userData.wall=null}
+ const pm=new THREE.MeshBasicMaterial({color:'#ffffff'}),pl=new THREE.Mesh(new THREE.BoxGeometry(TILE-2.2,.08,TILE-2.2),pm);pl.position.y=.34;pl.visible=false;g.add(pl);g.userData.plate=pl;
  g.position.set(pos(o.i),0,pos(o.j));world.add(g);groups[o.id]=g}
-function rebuildAll(){if(!world)return;for(const k in groups)world.remove(groups[k]);groups={};state.objs.forEach(build);placeRing();tint()}
-function tint(){if(!world||!window.THREE)return;const hot=new THREE.Color('#de5129');let mx=1;if(heatOn&&R)for(const o of state.objs){const p=R.per[o.id];if(p)mx=Math.max(mx,p.net[R.pki])}
- for(const o of state.objs){const g=groups[o.id];if(!g||!g.userData.wall)continue;const c=new THREE.Color(g.userData.base);
-  if(heatOn&&R&&R.per[o.id])c.lerp(hot,clamp(R.per[o.id].net[R.pki]/mx,0,1));g.userData.wall.color.copy(c)}}
+let kioskG=null;
+function buildKiosks(){if(!scene)return;if(kioskG)scene.remove(kioskG);kioskG=new THREE.Group();const cnt={};
+ for(const t of trafos()){const k=t.i+','+t.j,n=cnt[k]=(cnt[k]||0)+1,g=new THREE.Group(),m=new THREE.MeshStandardMaterial({color:tCol(t),roughness:.7,flatShading:true});
+  box(g,2.6,3,2.1,m,0,1.5,0);box(g,2.9,.3,2.4,mats.dark,0,3.15,0);box(g,.8,1.9,.05,mats.dark,-.5,1.2,1.08);box(g,.14,5,.14,mats.dark,0,5.6,0);
+  const dk=new THREE.Mesh(new THREE.CylinderGeometry(1.3,1.3,.35,24),m);dk.position.set(0,8.3,0);g.add(dk);const bolt=new THREE.Mesh(new THREE.ConeGeometry(.55,1.1,4),mats.acc);bolt.position.set(0,9.1,0);bolt.rotation.x=Math.PI;g.add(bolt);
+  g.position.set(pos(t.i)+4.1-(n-1)*2.9,0,pos(t.j)+4.1);g.userData.trafo=t.id;kioskG.add(g)}
+ scene.add(kioskG)}
+function rebuildAll(){if(!world)return;for(const k in groups)world.remove(groups[k]);groups={};state.objs.forEach(build);buildKiosks();placeRing();tint()}
+function tint(){if(!world||!window.THREE)return;const hot=new THREE.Color('#de5129'),heatOn=cmode==='piek',tr=cmode==='trafo';let mx=1;if(heatOn&&R)for(const o of state.objs){const p=R.per[o.id];if(p)mx=Math.max(mx,p.net[R.pki])}
+ for(const o of state.objs){const g=groups[o.id];if(!g)continue;const t=tr&&tById(o.msr);if(g.userData.plate){g.userData.plate.visible=tr;g.userData.plate.material.color.set(t?tCol(t):'#b0b6bf')}
+  if(!g.userData.wall)continue;const c=new THREE.Color(g.userData.base);
+  if(heatOn&&R&&R.per[o.id])c.lerp(hot,clamp(R.per[o.id].net[R.pki]/mx,0,1));if(t)c.lerp(new THREE.Color(tCol(t)),.55);g.userData.wall.color.copy(c)}}
 function placeRing(){if(!ring)return;const o=sel&&byId(sel);ring.visible=!!o;if(o)ring.position.set(pos(o.i),.35,pos(o.j))}
 
 /* ---------- UI ---------- */
@@ -319,8 +334,11 @@ function setTool(t){tool=t&&tool!==t?t:null;moving=false;document.querySelectorA
 function setHint(){$('#hint').textContent=moving?'Klik op een leeg kavel om het gebouw te verplaatsen. Esc annuleert.':tool?`${TYPES[tool].l}: klik op een leeg kavel om te plaatsen. Esc stopt.`:'Sleep om te draaien, scroll om te zoomen. Klik op een gebouw om het aan te passen.'}
 const nextId=()=>Math.max(0,...state.objs.map(o=>o.id))+1;
 function add(type,i,j){const id=nextId(),cnt=state.objs.filter(o=>o.type===type).length+1;
- const o=Object.assign({id,type,i,j,name:TYPES[type].l+' '+cnt},TYPES[type].d);state.objs.push(o);build(o);tint();commit();select(id);recompute()}
-function select(id){sel=id;placeRing();renderEditor();if(id&&innerWidth<=900)$('.side').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'})}
+ const o=Object.assign({id,type,i,j,name:TYPES[type].l+' '+cnt},TYPES[type].d);const nt=nearestT(i,j);if(nt)o.msr=nt.id;state.objs.push(o);build(o);tint();commit();select(id);recompute()}
+function nearestT(i,j){let b=null,bd=1e9;for(const t of trafos()){const d=(t.i-i)**2+(t.j-j)**2;if(d<bd){bd=d;b=t}}return b}
+const toEditor=()=>{const sd=$('.side');if(innerWidth<=900)sd.scrollIntoView({block:'start'});else sd.scrollTo({top:Math.max(0,$('#editor').offsetTop-sd.offsetTop-12),behavior:'smooth'})};
+function selectT(id){sel=null;selT=id;placeRing();renderEditor();toEditor()}
+function select(id){sel=id;selT=null;placeRing();renderEditor();if(id)toEditor()}
 const FIELDS={
  name:{l:'Naam',t:'text'},aantal:{l:'Aantal woningen',t:'num',min:1,max:2000},m2:{l:o=>TYPES[o.type].cat==='w'?'m² per woning':'Vloeroppervlak (m²)',t:'num',min:20,max:200000},
  func:{l:'Functie (profiel)',t:'sel',o:o=>FUNCS[o.type]},label:{l:'Energielabel / isolatie',t:'sel',o:LABELS},verw:{l:'Verwarming',t:'sel',o:VERW},pv:{l:'Zonnepanelen (kWp totaal)',t:'num',min:0,max:20000},
@@ -334,12 +352,22 @@ function fieldHtml(o,k){const f=FIELDS[k],l=typeof f.l==='function'?f.l(o):f.l,i
  if(f.t==='sel')return`<label class="fld"><span>${l}</span><select id="${id}" data-k="${k}">${opts.map(([v,t])=>`<option value="${v}"${String(o[k])===String(v)?' selected':''}>${t}</option>`).join('')}</select></label>`;
  return`<label class="fld"><span>${l}</span><input id="${id}" data-k="${k}" ${f.t==='num'?`type="number" inputmode="decimal" min="${f.min}" max="${f.max}"`:'type="text" maxlength="60"'} value="${esc(o[k]??'')}"></label>`}
 function renderEditor(onlyStats){
- const ed=$('#editor'),o=sel&&byId(sel);
+ const ed=$('#editor'),o=sel&&byId(sel),tt=!o&&selT&&tById(selT);
+ if(tt){const r=R&&R.TR.find(x=>x.t===tt),c=+tt.cap||0;
+  ed.innerHTML=`<p class="lab">Trafo / MSR${tt.src?' · '+esc(tt.src):''}</p><h2><span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:${tCol(tt)};margin-right:8px"></span>${esc(tt.name)}</h2>
+   <label class="fld"><span>Naam</span><input id="tf-name" type="text" maxlength="60" value="${esc(tt.name)}"></label>
+   <label class="fld"><span>Capaciteit (kW)</span><input id="tf-cap" type="number" min="0" max="5000" value="${c}"></label>
+   <dl class="mini"><dt>Aangesloten objecten</dt><dd>${r?r.no:0}</dd><dt>Woningen</dt><dd>${r?nf.format(r.nw):0}</dd><dt>Piek model</dt><dd>${r?nf.format(r.pk)+' kW':'–'}</dd>${r&&r.pk?`<dt>Moment</dt><dd>${when(r.pki)}</dd>`:''}${c?`<dt>Belasting</dt><dd>${r?nf.format(r.pk/c*100):0}%</dd>`:''}${tt.nbl?`<dt>NBL-limiet</dt><dd>${nf.format(tt.nbl)} kW</dd>`:''}${tt.pk?`<dt>Gemeten piek (Liander)</dt><dd>${nf.format(tt.pk)} kW</dd>`:''}</dl>
+   <p class="note">Klik op een gebouw en kies bij "Trafo" een andere trafo om de toewijzing te wijzigen.</p><div class="acts"><button class="btn warn" id="tf-del">Trafo verwijderen</button></div>`;
+  $('#tf-name').onchange=e=>{tt.name=e.target.value.slice(0,60);commit();renderTrafos()};
+  $('#tf-cap').onchange=e=>{const v=parseFloat(e.target.value);if(v>=0){tt.cap=v;commit();recompute()}};
+  $('#tf-del').onclick=()=>{state.trafos=trafos().filter(t=>t!==tt);for(const x of state.objs)if(x.msr===tt.id)x.msr=(nearestT(x.i,x.j)||{}).id;selT=null;buildKiosks();commit();renderEditor();recompute()};return}
  if(!o){ed.innerHTML=`<h2>Ontwerpen</h2><p>Kies een type in de bouwbalk en klik op een leeg kavel. Klik op een gebouw om omvang, functie, isolatie, verwarming, zonnepanelen en laadpunten aan te passen.</p><p class="note">Of importeer een bestaande buurt uit de BAG en ontwerp daarop verder: vervang de cv-ketels, voeg laadpleinen toe of zet er een batterij bij.</p>`;return}
  const p=R&&R.per[o.id],stats=p?`<dl class="mini" id="ostats"><dt>Jaarafname</dt><dd>${nf1.format(p.yr/1000)} MWh</dd><dt>Eigen piek</dt><dd>${nf.format(p.pk)} kW</dd><dt>Op buurtpiek</dt><dd>${nf.format(p.net[R.pki])} kW</dd><dt>${o.type==='batterij'?'Ontladen':'Teruglevering'}</dt><dd>${nf1.format(p.ex/1000)} MWh</dd></dl>`:'';
  if(onlyStats&&$('#ostats')){$('#ostats').outerHTML=stats;return}
  const lay=LAYOUT[TYPES[o.type].cat];
  ed.innerHTML=`<p class="lab">${TYPES[o.type].l}${o.src?' · uit BAG':''}</p><h2>${esc(o.name)}</h2>`+lay.map(r=>r.includes('|')?`<div class="two">${r.split('|').map(k=>fieldHtml(o,k)).join('')}</div>`:fieldHtml(o,r)).join('')+stats+
+  (trafos().length||1?`<div class="row" style="align-items:end"><label class="fld" style="flex:1"><span>Trafo</span><select id="f-msr"><option value="">Geen trafo</option>${trafos().map(t=>`<option value="${esc(t.id)}"${t.id===o.msr?' selected':''}>${esc(t.name)}</option>`).join('')}</select></label><button class="btn" id="newT" style="margin-bottom:12px">Nieuwe trafo hier</button></div>`:'')+
   (o.src?`<p class="note">${esc(o.src)}</p>`:'')+`<div class="acts" style="margin-top:6px"><button class="btn" id="mv">Verplaatsen</button><button class="btn" id="dup">Dupliceren</button><button class="btn warn" id="del">Verwijderen</button></div>`;
  ed.querySelectorAll('[data-k]').forEach(el=>{
   const up=()=>{const k=el.dataset.k,f=FIELDS[k];let v=el.value;if(f.t==='num'||f.n){v=parseFloat(v);if(!isFinite(v))return;if(f.min!=null)v=clamp(v,f.min,f.max)}o[k]=v;
@@ -347,13 +375,21 @@ function renderEditor(onlyStats){
   el.addEventListener('input',up);el.addEventListener('change',()=>{up();commit()})});
  $('#mv').onclick=()=>{moving=true;tool=null;document.querySelectorAll('.tool').forEach(b=>b.setAttribute('aria-pressed','false'));setHint()};
  $('#dup').onclick=()=>{const t=freeNear(o.i,o.j);if(!t)return;const id=nextId(),c=Object.assign({},o,{id,i:t[0],j:t[1],name:o.name+' (kopie)'});delete c.src;state.objs.push(c);build(c);commit();select(id);recompute()};
- $('#del').onclick=del}
+ $('#del').onclick=del;
+ $('#f-msr').onchange=e=>{o.msr=e.target.value||undefined;commit();tint();recompute()};
+ $('#newT').onclick=()=>{state.trafos=trafos();const id='n'+Date.now().toString(36),t={id,name:'Nieuwe trafo '+(state.trafos.length+1),cap:400,nbl:0,pk:0,i:o.i,j:o.j,src:'eigen ontwerp'};state.trafos.push(t);o.msr=id;buildKiosks();commit();renderEditor();recompute()}}
 function freeNear(i0,j0){for(let r=0;r<N;r++)for(let di=-r;di<=r;di++)for(let dj=-r;dj<=r;dj++){if(Math.max(Math.abs(di),Math.abs(dj))!==r)continue;const i=i0+di,j=j0+dj;if(i>=0&&j>=0&&i<N&&j<N&&!occ(i,j))return[i,j]}return null}
 function del(){if(!sel)return;state.objs=state.objs.filter(o=>o.id!==sel);if(groups[sel]){world.remove(groups[sel]);delete groups[sel]}sel=null;placeRing();commit();renderEditor();recompute()}
 $('#bar').addEventListener('click',e=>{const b=e.target.closest('.tool');if(b)setTool(b.dataset.t)});
 $('#contrib').addEventListener('click',e=>{const r=e.target.closest('.cb');if(r){select(+r.dataset.id);window.scrollTo({top:0,behavior:'smooth'})}});
 $('#contrib').addEventListener('keydown',e=>{if(e.key==='Enter'){const r=e.target.closest('.cb');if(r)select(+r.dataset.id)}});
-$('#heatmap').onclick=e=>{heatOn=!heatOn;e.currentTarget.setAttribute('aria-pressed',heatOn);e.currentTarget.textContent=heatOn?'Normale kleuren':'Kleur op piekbijdrage';tint()};
+function setCmode(m){cmode=cmode===m?'normaal':m;$('#heatmap').setAttribute('aria-pressed',cmode==='piek');$('#tmap').setAttribute('aria-pressed',cmode==='trafo');tint()}
+$('#heatmap').onclick=()=>setCmode('piek');$('#tmap').onclick=()=>setCmode('trafo');
+function renderTrafos(){const sec=$('#trafos'),T=trafos();$('#tmap').hidden=!T.length;sec.hidden=!T.length;if(!T.length||!R)return;
+ const rows=[...R.TR].sort((a,b)=>(b.t.cap?b.pk/b.t.cap:0)-(a.t.cap?a.pk/a.t.cap:0));
+ $('#trafo-rows').innerHTML=rows.map(r=>{const c=+r.t.cap||0,l=c?r.pk/c*100:0,col=r.t.id?tCol(r.t):'#b0b6bf';return`<tr data-t="${esc(r.t.id)}"><td><span class="sw" style="background:${col}"></span>${esc(r.t.name)}</td><td>${r.no} / ${nf.format(r.nw)}</td><td>${nf.format(r.pk)}</td><td>${c?nf.format(c):'–'}</td><td>${r.t.pk?nf.format(r.t.pk):'–'}</td><td><span class="lb"><i style="width:${Math.min(100,l)}%;background:${l>100?'var(--bad)':l>80?'var(--accent)':'var(--blue)'}"></i></span>${c?nf.format(l)+'%':''}</td></tr>`}).join('');
+ const over=rows.filter(r=>r.t.cap&&r.pk>r.t.cap).length;$('#trafo-sub').textContent=over?`${over} van de ${T.length} trafo's worden in het model overbelast.`:`Alle ${T.length} trafo's blijven in het model binnen hun capaciteit.`}
+$('#trafo-rows').addEventListener('click',e=>{const r=e.target.closest('tr');if(r&&r.dataset.t){selectT(r.dataset.t);window.scrollTo({top:0,behavior:'smooth'})}});
 $('#trafo').addEventListener('input',e=>{const v=parseFloat(e.target.value);if(v>0){state.trafo=v;schedule()}});$('#trafo').addEventListener('change',commit);
 $('#strat').addEventListener('change',e=>{state.strat=e.target.value;syncControls();commit();recompute()});
 $('#nbkw').addEventListener('change',e=>{const v=parseFloat(e.target.value);if(v>=0){state.nbkw=v;commit();recompute()}});
@@ -369,7 +405,7 @@ $('#jdet').addEventListener('toggle',()=>{if($('#jdet').open)$('#json').value=JS
 $('#copy').onclick=async()=>{$('#json').value=JSON.stringify(state);try{await navigator.clipboard.writeText($('#json').value);$('#jmsg').textContent='Gekopieerd.'}catch(e){$('#json').select();$('#jmsg').textContent='Selecteer en kopieer handmatig.'}};
 $('#load').onclick=()=>{try{const s=JSON.parse($('#json').value);if(!Array.isArray(s.objs))throw 0;const n=clamp(+s.n||8,4,28);
  s.objs=s.objs.filter(o=>TYPES[o.type]).map((o,k)=>Object.assign({},TYPES[o.type].d,o,{id:+o.id||1000+k,i:clamp(+o.i|0,0,n-1),j:clamp(+o.j|0,0,n-1),name:String(o.name||TYPES[o.type].l).slice(0,60)}));
- setState({v:2,n,trafo:+s.trafo||400,strat:STRATS.some(x=>x[0]===s.strat)?s.strat:'ongestuurd',nbkw:+s.nbkw||4,buurt:s.buurt,grid:s.grid,objs:s.objs});$('#jmsg').textContent='Geladen.'}
+ setState({v:2,n,trafo:+s.trafo||400,strat:STRATS.some(x=>x[0]===s.strat)?s.strat:'ongestuurd',nbkw:+s.nbkw||4,buurt:s.buurt,grid:s.grid,trafos:Array.isArray(s.trafos)?s.trafos.map(t=>({id:String(t.id),name:String(t.name||'Trafo').slice(0,60),cap:+t.cap||0,nbl:+t.nbl||0,pk:+t.pk||0,i:clamp(+t.i|0,0,n-1),j:clamp(+t.j|0,0,n-1),src:String(t.src||'').slice(0,80)})):[],objs:s.objs});$('#jmsg').textContent='Geladen.'}
  catch(e){$('#jmsg').textContent='Dit is geen geldige buurt-JSON.'}};
 new MutationObserver(applyTheme).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change',applyTheme);
@@ -407,7 +443,7 @@ $('#imp-q').addEventListener('input',e=>{const q=e.target.value.trim();pick_=nul
    $('#imp-sug').querySelectorAll('button').forEach(x=>x.setAttribute('aria-selected',x===b));choose({code:d.buurtcode,naam:d.buurtnaam||d.weergavenaam,gemeente:d.gemeentenaam||''},true)}}
   catch(err){$('#imp-sug').innerHTML=`<p class="note">Zoeken lukt niet (${esc(err.message)}). Vul de buurtcode in, bijv. BU03440420.</p>`}},250)});
 $('#imp-go').onclick=async()=>{if(!pick_)return;const b=$('#imp-go');b.disabled=true;
- try{const s=await importBuurt(pick_,{evm:$('#imp-evm').value,evp:+$('#imp-evp').value||0,pv:+$('#imp-pv').value||0,wp:$('#imp-wp').checked});setState(s);ist(`Klaar: ${nf.format(s.buurt.vbo)} verblijfsobjecten samengevoegd tot ${s.objs.length} blokken op een grid van ${s.n}×${s.n}. `+(s.buurt.lab==null?'Energielabels konden niet worden opgehaald; alle labels zijn geschat uit het bouwjaar. ':`Geregistreerde energielabels gevonden voor ${nf.format(s.buurt.lab)} panden. `)+
+ try{const s=await importBuurt(pick_,{evm:$('#imp-evm').value,evp:+$('#imp-evp').value||0,pv:+$('#imp-pv').value||0,wp:$('#imp-wp').checked});setState(s);ist(`Klaar: ${nf.format(s.buurt.vbo)} verblijfsobjecten samengevoegd tot ${s.objs.length} blokken op een grid van ${s.n}×${s.n}, ${s.trafos.length} trafo's. `+(s.buurt.lab==null?'Energielabels konden niet worden opgehaald; alle labels zijn geschat uit het bouwjaar. ':`Geregistreerde energielabels gevonden voor ${nf.format(s.buurt.lab)} panden. `)+
   (s.buurt.ev.mode==='pct'?`Elektrische auto's: scenario ${s.buurt.ev.pct}% van ${nf1.format(s.buurt.ev.apa)} auto per adres.`:s.buurt.ev.msr?`Elektrische auto's: ${nf1.format(s.buurt.ev.share*100)}% van de auto's, uit ${s.buurt.ev.msr} MSR's in SlimLaden.`:`Geen EV-data van SlimLaden voor deze buurt: landelijk gemiddelde gebruikt (7,8% van 0,95 auto per adres).`));showTab('lab')}
  catch(err){ist('Importeren mislukt: '+err.message+(location.protocol==='file:'?' Open Buurtlab via een webserver.':' Werkt het hier niet, gebruik dan rickwol.github.io/buurtlab.'))}
  b.disabled=false};
@@ -421,12 +457,13 @@ async function importBuurt(pk,opt){
  const vbos=await allItems(`${BAG}verblijfsobject/items?f=json&limit=1000&bbox=${bb}`,'Verblijfsobjecten');
  const pands=await allItems(`${BAG}pand/items?f=json&limit=1000&bbox=${bb}`,'Panden');
  await evData();const evl=evLocal(polys);
+ ist('Trafo\'s ophalen…');const msrs=[];{const d=.01;for(let a=Math.floor((x0-d)*20);a<=Math.floor((x1+d)*20);a++)for(let b=Math.floor((y0-d)*20);b<=Math.floor((y1+d)*20);b++){try{const r=await fetch(`profielen/msr/${a}_${b}.json`);if(r.ok)for(const m of await r.json())msrs.push(m)}catch(e){}}}
  ist('Energielabels ophalen bij RIVM…');let labels=null;
  try{const j=await getJSON(`${RIVM}?service=WFS&version=1.0.0&request=GetFeature&typeName=nl:rvo_energielabels&outputFormat=application/json&maxFeatures=50000&bbox=${bb}&propertyName=identificatie,dominant_label,aant_labels`);
   labels={};for(const f of j.features||[]){const p=f.properties||{},l=mapLab(p.dominant_label);if(l)labels[pid(p.identificatie)]={l,n:+p.aant_labels||1}}}catch(e){labels=null}
  ist('Gebouwen samenvoegen…');
- return buildFromBag({polys,vbos,pands,labels,evl,code:pk.code,naam:pr.buurtnaam||pk.naam,gemeente:pr.gemeentenaam||pk.gemeente,opt})}
-function buildFromBag({polys,vbos,pands,labels,evl,code,naam,gemeente,opt}){
+ return buildFromBag({polys,vbos,pands,labels,evl,msrs,code:pk.code,naam:pr.buurtnaam||pk.naam,gemeente:pr.gemeentenaam||pk.gemeente,opt})}
+function buildFromBag({polys,vbos,pands,labels,evl,msrs,code,naam,gemeente,opt}){
  const LB=id=>labels&&labels[id];
  const lat0=(polys[0][0].reduce((s,p)=>s+p[1],0))/polys[0][0].length,lon0=polys[0][0][0][0],kx=111320*Math.cos(lat0*Math.PI/180),ky=110574;
  const XY=([lo,la])=>[(lo-lon0)*kx,(la-lat0)*ky];
@@ -458,11 +495,18 @@ function buildFromBag({polys,vbos,pands,labels,evl,code,naam,gemeente,opt}){
    const lab=Object.entries(lv).sort((a,b)=>b[1]-a[1])[0][0],real=ch.reduce((s,a)=>s+a.real,0);
    blocks.push({type:w<=2&&ch.length<=2?'vrij':'rij',aantal:w,m2:m2/w,bj,lab,real,x:ch.reduce((s,a)=>s+a.x,0)/ch.length,y:ch.reduce((s,a)=>s+a.y,0)/ch.length,street:street&&street[0]})}}
  if(!blocks.length)throw new Error('geen gebouwen gevonden in deze buurt.');
+ let M=[];
+ if(msrs&&msrs.length){for(const r of msrs){const pts=[];let inside=inPolys([r[1]/1e5,r[2]/1e5],polys);const d=r[8];for(let k=0;k<d.length;k+=2){const ll=[(r[1]+d[k])/1e5,(r[2]+d[k+1])/1e5];if(!inside&&inPolys(ll,polys))inside=true;pts.push(XY(ll))}
+   if(inside)M.push({id:r[0],loc:XY([r[1]/1e5,r[2]/1e5]),pts,cap:r[3],nbl:r[4],pk:r[5],name:r[6],ntr:r[7]})}
+  const H=new Map(),C=60;M.forEach(m=>{for(const p of m.pts){const k=Math.floor(p[0]/C)+','+Math.floor(p[1]/C);(H.get(k)||H.set(k,[]).get(k)).push([p[0],p[1],m])}});
+  const near=(x,y)=>{let best=null,bd=1e18;for(let r=0;r<=6;r++){const cx=Math.floor(x/C),cy=Math.floor(y/C);for(let a=-r;a<=r;a++)for(let b=-r;b<=r;b++){if(Math.max(Math.abs(a),Math.abs(b))!==r)continue;for(const p of H.get((cx+a)+','+(cy+b))||[]){const dd=(p[0]-x)**2+(p[1]-y)**2;if(dd<bd){bd=dd;best=p[2]}}}if(best&&r>=1)break}
+   if(!best)for(const m of M){const dd=(m.loc[0]-x)**2+(m.loc[1]-y)**2;if(dd<bd){bd=dd;best=m}}return best};
+  if(M.length)for(const b of blocks){const m=near(b.x,b.y);b.msr=m?m.id:''}}
  let bx0=Infinity,by0=Infinity,bx1=-Infinity,by1=-Infinity;for(const b of blocks){bx0=Math.min(bx0,b.x);bx1=Math.max(bx1,b.x);by0=Math.min(by0,b.y);by1=Math.max(by1,b.y)}
  const span=Math.max(bx1-bx0,by1-by0,50);let n=clamp(Math.ceil(span/50)+1,8,24),merged;
  for(let f=1;;f++){const cell=span/(n-1)*f,grp={};
   for(const b of blocks){const lab=b.lab,ci=Math.floor((b.x-bx0)/cell),cj=Math.floor((by1-b.y)/cell);
-   const key=[b.type,b.func||'',b.type==='rij'||b.type==='vrij'||b.type==='app'?lab:'',ci,cj].join('|');const g=grp[key]=grp[key]||{...b,aantal:0,m2s:0,bjs:0,ws:0,xs:0,ys:0,k:0,streets:{},rl:0,nu:0};g.rl+=b.real||0;g.nu+=b.aantal||1;
+   const key=[b.msr||'',b.type,b.func||'',b.type==='rij'||b.type==='vrij'||b.type==='app'?lab:'',ci,cj].join('|');const g=grp[key]=grp[key]||{...b,aantal:0,m2s:0,bjs:0,ws:0,xs:0,ys:0,k:0,streets:{},rl:0,nu:0};g.rl+=b.real||0;g.nu+=b.aantal||1;
    const w=b.aantal||1;g.aantal+=b.aantal||0;g.m2s+=b.aantal?b.m2*b.aantal:b.m2;g.bjs+=(b.bj||0)*w;g.ws+=w;g.xs+=b.x;g.ys+=b.y;g.k++;if(b.street)g.streets[b.street]=(g.streets[b.street]||0)+w}
   merged=Object.values(grp);if(merged.length<=n*n*.8||f>6)break}
  const objs=[],used=new Set();let id=0;merged.sort((a,b)=>(b.aantal||b.m2s/100)-(a.aantal||a.m2s/100));
@@ -470,15 +514,17 @@ function buildFromBag({polys,vbos,pands,labels,evl,code,naam,gemeente,opt}){
  for(const g of merged){const x=g.xs/g.k,y=g.ys/g.k;let i=clamp(Math.round((x-bx0)/cell),0,n-1),j=clamp(Math.round((by1-y)/cell),0,n-1);
   if(used.has(i+','+j)){let best=null,bd=1e9;for(let a=0;a<n;a++)for(let c=0;c<n;c++){if(used.has(a+','+c))continue;const d=(a-i)**2+(c-j)**2;if(d<bd){bd=d;best=[a,c]}}if(!best)continue;[i,j]=best}
   used.add(i+','+j);const bj=Math.round(g.bjs/g.ws)||0,lab=g.lab||labelFromYear(bj),rs=Math.round(Math.min(1,g.rl/g.nu)*100),lsrc=rs?`label ${lab}: ${rs}% geregistreerd (EP-Online via RIVM), rest geschat uit bouwjaar`:`label ${lab} geschat uit bouwjaar`,st=Object.entries(g.streets).sort((a,b)=>b[1]-a[1])[0],sn=st?st[0]:'';
-  const o=Object.assign({id:++id,type:g.type,i,j},TYPES[g.type].d);
+  const o=Object.assign({id:++id,type:g.type,i,j},TYPES[g.type].d);if(g.msr)o.msr=g.msr;
   if(TYPES[g.type].cat==='w'){o.aantal=g.aantal;o.m2=Math.round(g.m2s/g.aantal)||80;o.label=lab;o.verw=opt.wp&&bj>=2015?'wp_lucht':'gas';
    lpAcc+=g.aantal*evPerW;o.lp=Math.floor(lpAcc);lpAcc-=o.lp;o.evkwh=3500;pvAcc+=g.aantal*opt.pv/100;const npv=Math.floor(pvAcc);pvAcc-=npv;o.pv=Math.round(npv*(g.type==='app'?1:3.5)*10)/10;
    o.name=(g.type==='app'?'Flat ':g.type==='vrij'?'Huis ':'Rij ')+(sn||'zonder straat')+(bj?` (${bj})`:'');
    o.src=`${g.aantal} woningen, gemiddeld ${o.m2} m², bouwjaar ≈ ${bj||'onbekend'}; ${lsrc}`}
   else{o.m2=Math.round(g.m2s);o.func=g.func;o.label=lab;o.verw='gas';o.pv=0;o.lp=0;o.name=g.nm+(sn?' '+sn:'');o.src=`${nf.format(o.m2)} m² ${g.nm.toLowerCase()} uit de BAG, bouwjaar ≈ ${bj||'onbekend'}; ${lsrc}`}
   objs.push(o)}
+ const usedM=new Set(objs.map(o=>o.msr).filter(Boolean)),tr=M.filter(m=>usedM.has(m.id)).map((m,k)=>({id:m.id,name:m.name?'MSR '+m.name:'MSR '+m.id,cap:m.cap||0,nbl:m.nbl||0,pk:m.pk||0,src:m.cap?`Liander, ${m.ntr} transformator${m.ntr>1?'en':''}`:'geen capaciteitsdata',
+  i:clamp(Math.round((m.loc[0]-bx0)/cell),0,n-1),j:clamp(Math.round((by1-m.loc[1])/cell),0,n-1)}));
  const nw=objs.reduce((s,o)=>s+(TYPES[o.type].cat==='w'?o.aantal:0),0),grid=TRAFO[code]||null;
- return{v:2,n,trafo:grid?grid[1]:Math.max(400,Math.ceil(nw/120)*400),strat:state.strat||'ongestuurd',nbkw:state.nbkw??4,buurt:{code,naam,gemeente,vbo:nV,lab:labels?Object.keys(labels).length:null,ev:{share:evl?evl.share:.078,apa,msr:evl?evl.n:0,mode:opt.evm,pct:opt.evp}},grid,objs}}
+ return{v:2,n,trafos:tr,trafo:tr.length&&tr.every(t=>t.cap>0)?tr.reduce((s,t)=>s+t.cap,0):grid?grid[1]:Math.max(400,Math.ceil(nw/120)*400),strat:state.strat||'ongestuurd',nbkw:state.nbkw??4,buurt:{code,naam,gemeente,vbo:nV,lab:labels?Object.keys(labels).length:null,ev:{share:evl?evl.share:.078,apa,msr:evl?evl.n:0,mode:opt.evm,pct:opt.evp}},grid,objs}}
 window.__buurtlab={buildFromBag,get state(){return state},get R(){return R},recompute,setState};
 
 
