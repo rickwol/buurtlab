@@ -132,7 +132,7 @@ const byId=id=>state.objs.find(o=>o.id===id);
 const occ=(i,j)=>state.objs.find(o=>o.i===i&&o.j===j);
 let N=clamp(+state.n||8,4,28);const TILE=12,pos=k=>(k-(N-1)/2)*TILE;
 function setState(s,push=true){state=s;N=clamp(+state.n||8,4,28);sel=null;syncControls();buildGround();rebuildAll();renderName();renderEditor();if(push)commit();recompute()}
-function renderName(){const b=state.buurt;$('#bname').textContent=b?`${b.naam}, ${b.gemeente} (${b.code}). ${nf.format(b.vbo)} verblijfsobjecten uit de BAG, samengevoegd tot ${state.objs.length} blokken.`:'Ontwerp een buurt of importeer een bestaande, en zie de piekvraag op het net per kwartier.';
+function renderName(){const b=state.buurt;$('#bchip').textContent=b?b.naam+', '+b.gemeente:state.objs.length?'Eigen ontwerp':'';$('#bname').textContent=b?`${b.naam}, ${b.gemeente} (${b.code}). ${nf.format(b.vbo)} verblijfsobjecten uit de BAG, samengevoegd tot ${state.objs.length} blokken.`:'Ontwerp een buurt of importeer een bestaande, en zie de piekvraag op het net per kwartier.';
  const g=state.grid,gi=$('#grid-info');gi.hidden=!g;if(g)gi.textContent=`Liander: ${g[0]} trafo's in deze buurt · capaciteit ${nf.format(g[1])} kW · NBL-limiet ${nf.format(g[2])} kW · som gemeten pieken ${nf.format(g[3])} kW`}
 function syncControls(){$('#trafo').value=state.trafo;$('#strat').value=state.strat||'ongestuurd';$('#nbkw').value=state.nbkw??4;$('#nb-wrap').hidden=state.strat!=='netbewust';$('#strat-note').textContent=SNOTE[state.strat||'ongestuurd']}
 
@@ -183,7 +183,7 @@ function renderKpi(){
 
 /* ---------- charts ---------- */
 const nice=r=>{const p=Math.pow(10,Math.floor(Math.log10(r||1))),f=r/p;return(f<1.5?1:f<3?2:f<7?5:10)*p};
-function axisY(y,lo,hi,W,m){const st=nice((hi-lo)/4);let s='';for(let v=Math.ceil(lo/st)*st;v<=hi+1e-9;v+=st){const yy=y(v);s+=`<line x1="${m.l}" x2="${W-m.r}" y1="${yy}" y2="${yy}" stroke="var(--line)"/><text x="${m.l-6}" y="${yy+4}" text-anchor="end" font-size="12" fill="var(--mute)">${nf.format(v)}</text>`}return s}
+function axisY(y,lo,hi,W,m){const st=nice((hi-lo)/4);let s='';for(let v=Math.ceil(lo/st)*st;v<=hi+1e-9;v+=st){const yy=y(v);s+=`<line x1="${m.l}" x2="${W-m.r}" y1="${yy}" y2="${yy}" stroke="var(--line)"/><text x="${m.l-6}" y="${yy+4}" text-anchor="end" font-size="12" fill="var(--mute)">${nf.format(Math.abs(v)<1e-9?0:v)}</text>`}return s}
 function hline(y,v,W,m,col,lab,dy){return`<line x1="${m.l}" x2="${W-m.r}" y1="${y(v)}" y2="${y(v)}" stroke="${col}" stroke-width="1.5" stroke-dasharray="6 4"/><text x="${W-m.r-4}" y="${y(v)+(dy||-6)}" text-anchor="end" font-size="12" fill="${col}">${lab}</text>`}
 function drawWeek(){
  const box=$('#f-week'),s=box.querySelector('svg'),W=box.clientWidth,Hh=box.clientHeight;if(!R||!W)return;
@@ -388,19 +388,17 @@ const inRing=(pt,r)=>{let c=false;for(let i=0,j=r.length-1;i<r.length;j=i++){con
 const inPolys=(pt,polys)=>polys.some(p=>inRing(pt,p[0])&&!p.slice(1).some(h=>inRing(pt,h)));
 const pid=s=>{const m=String(s).match(/\d{16}/);return m?m[0]:String(s)};
 let pick_=null,sugT;
-$('#imp-open').onclick=()=>{const p=$('#imp'),o=p.hidden;p.hidden=!o;$('#imp-open').setAttribute('aria-expanded',o);if(o)$('#imp-q').focus()};
-$('#imp-close').onclick=()=>{$('#imp').hidden=true;$('#imp-open').setAttribute('aria-expanded','false')};
 $('#imp-q').addEventListener('input',e=>{const q=e.target.value.trim();pick_=null;$('#imp-go').disabled=true;clearTimeout(sugT);
- const m=q.toUpperCase().match(/^BU[0-9A-Z]{8}$/);if(m){pick_={code:m[0],naam:m[0],gemeente:''};$('#imp-go').disabled=false;$('#imp-sug').innerHTML='';return}
+ const m=q.toUpperCase().match(/^BU[0-9A-Z]{8}$/);if(m){$('#imp-sug').innerHTML='';choose({code:m[0],naam:m[0],gemeente:''},true);return}
  if(q.length<3){$('#imp-sug').innerHTML='';return}
  sugT=setTimeout(async()=>{try{const j=await getJSON(`${LS}?q=${encodeURIComponent(q)}&fq=type:buurt&fl=weergavenaam,buurtcode,buurtnaam,gemeentenaam&rows=8`);
   const docs=(j.response&&j.response.docs)||[];
   $('#imp-sug').innerHTML=docs.map((d,k)=>`<button type="button" role="option" aria-selected="false" data-k="${k}">${esc(d.buurtnaam||d.weergavenaam)}<small>${esc(d.gemeentenaam||'')} · ${esc(d.buurtcode||'')}</small></button>`).join('')||'<p class="note">Geen buurt gevonden.</p>';
-  $('#imp-sug').onclick=ev=>{const b=ev.target.closest('button');if(!b)return;const d=docs[+b.dataset.k];pick_={code:d.buurtcode,naam:d.buurtnaam||d.weergavenaam,gemeente:d.gemeentenaam||''};
-   $('#imp-sug').querySelectorAll('button').forEach(x=>x.setAttribute('aria-selected',x===b));$('#imp-go').disabled=false}}
+  $('#imp-sug').onclick=ev=>{const b=ev.target.closest('button');if(!b)return;const d=docs[+b.dataset.k];
+   $('#imp-sug').querySelectorAll('button').forEach(x=>x.setAttribute('aria-selected',x===b));choose({code:d.buurtcode,naam:d.buurtnaam||d.weergavenaam,gemeente:d.gemeentenaam||''},true)}}
   catch(err){$('#imp-sug').innerHTML=`<p class="note">Zoeken lukt niet (${esc(err.message)}). Vul de buurtcode in, bijv. BU03440420.</p>`}},250)});
 $('#imp-go').onclick=async()=>{if(!pick_)return;const b=$('#imp-go');b.disabled=true;
- try{const s=await importBuurt(pick_,{lp:+$('#imp-lp').value||0,pv:+$('#imp-pv').value||0,wp:$('#imp-wp').checked});setState(s);ist(`Klaar: ${nf.format(s.buurt.vbo)} verblijfsobjecten samengevoegd tot ${s.objs.length} blokken op een grid van ${s.n}×${s.n}.`)}
+ try{const s=await importBuurt(pick_,{lp:+$('#imp-lp').value||0,pv:+$('#imp-pv').value||0,wp:$('#imp-wp').checked});setState(s);ist(`Klaar: ${nf.format(s.buurt.vbo)} verblijfsobjecten samengevoegd tot ${s.objs.length} blokken op een grid van ${s.n}×${s.n}.`);showTab('lab')}
  catch(err){ist('Importeren mislukt: '+err.message+(location.protocol==='file:'?' Open Buurtlab via een webserver.':' Werkt het hier niet, gebruik dan rickwol.github.io/buurtlab.'))}
  b.disabled=false};
 async function importBuurt(pk,opt){
@@ -466,9 +464,46 @@ function buildFromBag({polys,vbos,pands,code,naam,gemeente,opt}){
  return{v:2,n,trafo:grid?grid[1]:Math.max(400,Math.ceil(nw/120)*400),strat:state.strat||'ongestuurd',nbkw:state.nbkw??4,buurt:{code,naam,gemeente,vbo:nV},grid,objs}}
 window.__buurtlab={buildFromBag,get state(){return state},get R(){return R},recompute,setState};
 
+
+/* ---------- tabs en kaart ---------- */
+function showTab(t){const lab=t==='lab';$('#tab-kies').hidden=lab;$('#tab-lab').hidden=!lab;$('#t-kies').setAttribute('aria-selected',!lab);$('#t-lab').setAttribute('aria-selected',lab);
+ try{history.replaceState(null,'',lab?'#ontwerpen':'#kiezen')}catch(e){}if(!lab)initMap();else setTimeout(()=>{drawWeek();drawLdc()},0)}
+$('#t-kies').onclick=()=>showTab('kies');$('#t-lab').onclick=()=>showTab('lab');
+document.querySelector('.tabs').addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key==='ArrowLeft'){const lab=$('#t-kies').getAttribute('aria-selected')==='true';showTab(lab?'lab':'kies');$(lab?'#t-lab':'#t-kies').focus()}});
+$('#start-leeg').onclick=()=>{setState({v:2,n:10,trafo:400,strat:state.strat,nbkw:state.nbkw,objs:[]});showTab('lab')};
+$('#start-vb').onclick=()=>{setState(SAMPLE());showTab('lab')};$('#start-door').onclick=()=>showTab('lab');
+let map=null,bLayer=null,selLayer=null,mapT,lastBB='';
+function initMap(){
+ if(map||!window.L){if(!window.L)$('#map-hint').textContent='De kaart kon niet laden. Zoeken op naam of buurtcode werkt wel.';else map.invalidateSize();return}
+ map=L.map('map',{zoomSnap:.5}).setView([52.15,5.3],8);
+ L.tileLayer('https://service.pdok.nl/brt/achtergrondkaart/wmts/v2_0/grijs/EPSG:3857/{z}/{x}/{y}.png',{maxZoom:19,minZoom:6,attribution:'Kaart: <a href="https://www.pdok.nl">Kadaster / PDOK</a> · Buurten: CBS'}).addTo(map);
+ bLayer=L.geoJSON(null,{style:f=>({color:TRAFO[f.properties.buurtcode]?'#1f5eff':'#596372',weight:TRAFO[f.properties.buurtcode]?2:1.2,fillColor:'#f5b700',fillOpacity:.04}),
+  onEachFeature:(f,l)=>{l.on('click',()=>{const p=f.properties;choose({code:p.buurtcode,naam:p.buurtnaam,gemeente:p.gemeentenaam,props:p},false,f)});
+   l.on('mouseover',()=>l.setStyle({fillOpacity:.18}));l.on('mouseout',()=>l.setStyle({fillOpacity:.04}));l.bindTooltip(()=>esc(f.properties.buurtnaam),{sticky:true})}}).addTo(map);
+ map.on('moveend',()=>{clearTimeout(mapT);mapT=setTimeout(loadBuurten,250)});setTimeout(()=>map.invalidateSize(),50)}
+async function loadBuurten(){
+ if(map.getZoom()<13){bLayer.clearLayers();lastBB='';$('#map-hint').textContent='Zoom in tot de buurtgrenzen verschijnen en klik op een buurt. Blauw omlijnde buurten hebben trafodata van Liander.';return}
+ const b=map.getBounds(),bb=[b.getWest(),b.getSouth(),b.getEast(),b.getNorth()].map(v=>v.toFixed(4)).join(',');if(bb===lastBB)return;lastBB=bb;
+ $('#map-hint').textContent='Buurtgrenzen laden…';
+ try{const j=await getJSON(`${CBS(2025)}?f=json&limit=300&bbox=${bb}`);if(bb!==lastBB)return;bLayer.clearLayers();bLayer.addData(j.features||[]);
+  $('#map-hint').textContent=`${(j.features||[]).length} buurten in beeld. Klik op een buurt. Blauw omlijnd: met trafodata van Liander.`}
+ catch(e){$('#map-hint').textContent='Buurtgrenzen laden lukt niet ('+e.message+').'}}
+async function choose(pk,zoom,feat){
+ pick_=pk;$('#imp-go').disabled=false;
+ if(!feat){try{const j=await getJSON(`${CBS(2025)}?f=json&buurtcode=${encodeURIComponent(pk.code)}`);feat=j.features&&j.features[0];if(feat){pk.props=feat.properties;pk.naam=feat.properties.buurtnaam||pk.naam;pk.gemeente=feat.properties.gemeentenaam||pk.gemeente}}catch(e){}}
+ if(map&&feat){if(selLayer)map.removeLayer(selLayer);selLayer=L.geoJSON(feat,{style:{color:'#f5b700',weight:4,fillOpacity:.15,fillColor:'#f5b700'},interactive:false}).addTo(map);if(zoom)map.fitBounds(selLayer.getBounds(),{maxZoom:16,padding:[30,30]})}
+ const p=pk.props||{},g=TRAFO[pk.code],row=(k,v)=>v==null||v===''?'':`<dt>${k}</dt><dd>${v}</dd>`;
+ $('#bcard').innerHTML=`<h3>${esc(pk.naam)}</h3><p class="note">${esc(pk.gemeente)} · ${esc(pk.code)}</p><dl>`+
+  row('Inwoners',p.aantal_inwoners!=null&&p.aantal_inwoners>=0?nf.format(p.aantal_inwoners):null)+row('Huishoudens',p.aantal_huishoudens!=null&&p.aantal_huishoudens>=0?nf.format(p.aantal_huishoudens):null)+
+  row('Oppervlakte land',p.oppervlakte_land_in_ha!=null?nf.format(p.oppervlakte_land_in_ha)+' ha':null)+
+  (g?row("Trafo's (Liander)",g[0])+row('Capaciteit',nf.format(g[1])+' kW')+row('NBL-limiet',nf.format(g[2])+' kW')+row('Som gemeten pieken',nf.format(g[3])+' kW'):'')+
+  `</dl>${g?'':'<p class="note" style="margin:8px 0 0">Geen trafodata voor deze buurt; de netcapaciteit wordt geschat.</p>'}`}
+
 /* ---------- start ---------- */
 syncControls();setHint();renderName();renderEditor();
+const hadState=!!(()=>{try{return localStorage.getItem(KEY)}catch(e){return null}})();$('#start-door').hidden=!hadState;
 try{initThree()}catch(err){view.innerHTML='<p class="hint" style="position:static;margin:20px">De 3D-weergave kon niet laden in deze browser. Het rekenwerk werkt wel.</p>'}
 rebuildAll();
+showTab(location.hash==='#ontwerpen'?'lab':'kies');
 loadData().then(()=>{$('#loading').remove();recompute()}).catch(err=>{$('#loading').textContent='De profielen konden niet worden geladen ('+err.message+'). Open Buurtlab via een webserver, bijvoorbeeld rickwol.github.io/buurtlab.'});
 }

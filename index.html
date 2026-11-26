@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Buurtlab piekvraag</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 /* VOICE: precise engineering tool with a playful build-mode, like a planner's maquette table
@@ -18,22 +19,17 @@
 --accent:#f5b700;--blue:light-dark(#1f5eff,#6b96ff);--heat:light-dark(#de5129,#ff7d55);--base:light-dark(#7b8698,#8e9aac);
 --bad:light-dark(#c62828,#ff6b6b);--pv:light-dark(#e0a400,#f5c542);--bat:light-dark(#7446c9,#a98bff);--nbl:light-dark(#d9730d,#ffa24d)}
 :root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
-*{box-sizing:border-box;min-width:0}
+*{box-sizing:border-box;min-width:0}[hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 Inter,system-ui,sans-serif;overflow-x:clip}
 h1,h2,.big{font-family:"Space Grotesk",Inter,sans-serif;font-weight:600;line-height:1.05;text-wrap:balance;margin:0}
 .band{padding:clamp(28px,4vw,56px) max(5vw,16px)}
 .fig{position:relative;min-height:300px}.fig>svg{position:absolute;inset:0;width:100%;height:100%}
 code{overflow-wrap:anywhere}
-.top{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:end;justify-content:space-between;padding:20px max(5vw,16px) 16px}
-.top h1{font-size:clamp(32px,4vw,44px)}.top p{margin:4px 0 0;color:var(--mute);max-width:70ch}
 .acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 button,select,input{font:inherit;font-size:16px;color:inherit}
 .btn{min-height:44px;padding:0 16px;border-radius:10px;border:1px solid var(--line);background:var(--panel);cursor:pointer}
 .btn:hover{border-color:var(--mute)}.btn:focus-visible,select:focus-visible,input:focus-visible,.tool:focus-visible,.sug button:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
 .btn.warn{color:var(--bad)}.btn.prim{background:var(--ink);color:var(--bg);border-color:var(--ink)}.btn:disabled{opacity:.45;cursor:default}
-.imp{background:var(--panel);border-top:1px solid var(--line);padding:20px max(5vw,16px)}
-.imp-in{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:28px;max-width:1240px}
-.imp h2{font-size:24px;margin-bottom:6px}
 .sug{display:grid;gap:4px;margin-top:-4px}.sug button{text-align:left;min-height:44px;padding:6px 12px;border:1px solid var(--line);border-radius:9px;background:var(--soft);cursor:pointer}
 .sug button[aria-selected=true]{border-color:var(--ink);background:var(--ink);color:var(--bg)}.sug small{opacity:.7;margin-left:6px}
 .chk{display:flex;gap:10px;align-items:flex-start;font-size:15px;margin:6px 0}.chk input{width:20px;height:20px;margin-top:2px;flex:none}
@@ -78,6 +74,24 @@ hr{border:0;border-top:1px solid var(--line);margin:18px 0}
 details{border-top:1px solid var(--line);padding:12px 0}summary{cursor:pointer;font-weight:600;min-height:32px}
 details ul{padding-left:20px;max-width:80ch}details li{margin:4px 0}
 textarea{width:100%;min-height:140px;font:13px/1.4 ui-monospace,monospace;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--soft);color:inherit}
+.top{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center;justify-content:space-between;padding:14px max(5vw,16px);border-bottom:1px solid var(--line);background:var(--panel)}
+.brand{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}.top h1{font-size:clamp(28px,3.4vw,38px)}
+.chip{font-size:14px;color:var(--mute)}
+.tabs{display:flex;gap:4px;padding:4px;background:var(--soft);border-radius:12px}
+.tabs button{min-height:44px;padding:0 16px;border:0;border-radius:9px;background:none;cursor:pointer;color:var(--mute);font-weight:500}
+.tabs button b{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--line);color:var(--ink);font-size:13px;margin-right:6px}
+.tabs button[aria-selected=true]{background:var(--panel);color:var(--ink);box-shadow:0 1px 4px rgba(0,0,0,.12)}.tabs button[aria-selected=true] b{background:var(--accent);color:#121820}
+.tabs button:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+.kies{display:grid;grid-template-columns:minmax(0,1fr) 420px;border-bottom:1px solid var(--line)}
+.mapwrap{position:relative;height:clamp(520px,80vh,900px)}#map{position:absolute;inset:0;background:var(--soft)}
+.mapwrap .hint{z-index:500;left:58px;top:12px}
+.kpanel{background:var(--panel);border-left:1px solid var(--line);padding:22px;max-height:clamp(520px,80vh,900px);overflow:auto}
+.kpanel h2{font-size:26px;margin-bottom:8px}.kpanel .h3{font-size:20px;margin-bottom:10px}
+.card{border:1px solid var(--line);border-radius:12px;padding:14px;margin:6px 0 16px;background:var(--soft)}
+.card h3{font:600 20px/1.15 "Space Grotesk",Inter,sans-serif;margin:0 0 4px}.card dl{display:grid;grid-template-columns:1fr auto;gap:4px 12px;margin:10px 0 0;font-size:14px}.card dt{color:var(--mute)}.card dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
+.labbar{display:flex;flex-wrap:wrap;gap:10px 24px;align-items:center;justify-content:space-between;padding:12px max(5vw,16px)}.labbar p{margin:0;color:var(--mute);max-width:80ch}
+.leaflet-container{font:inherit}
+@media(max-width:900px){.kies{grid-template-columns:minmax(0,1fr)}.mapwrap{height:56vh}.kpanel{border-left:0;max-height:none}}
 @media(max-width:900px){.app{grid-template-columns:minmax(0,1fr)}.side{border-left:0;max-height:none}.stage{height:62vh}.charts,.who,.imp-in{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:600px){.tool{min-width:60px;font-size:12px}.cb{grid-template-columns:minmax(0,8em) minmax(0,1fr) 4.8em}.hint{font-size:13px}}
 @media(prefers-reduced-motion:reduce){.meter i{transition:none}}
@@ -85,28 +99,34 @@ textarea{width:100%;min-height:140px;font:13px/1.4 ui-monospace,monospace;paddin
 </head>
 <body>
 <header class="top">
-  <div><h1>Buurtlab</h1><p id="bname">Ontwerp een buurt of importeer een bestaande, en zie de piekvraag op het net per kwartier.</p></div>
-  <div class="acts"><button class="btn prim" id="imp-open" aria-expanded="false">Echte buurt importeren</button><button class="btn" id="undo">Ongedaan maken</button><button class="btn" id="reset">Voorbeeldbuurt</button><button class="btn warn" id="clear">Leeg kavelgrid</button></div>
+  <div class="brand"><h1>Buurtlab</h1><span class="chip" id="bchip"></span></div>
+  <nav class="tabs" role="tablist" aria-label="Stappen">
+    <button role="tab" id="t-kies" aria-controls="tab-kies" aria-selected="true"><b>1</b> Buurt kiezen</button>
+    <button role="tab" id="t-lab" aria-controls="tab-lab" aria-selected="false"><b>2</b> Ontwerpen</button>
+  </nav>
 </header>
-<section class="imp" id="imp" hidden>
-  <div class="imp-in">
-    <div>
-      <h2>Echte buurt importeren</h2>
-      <p class="note">Haalt de CBS-buurtgrens en alle gebouwen uit de BAG op (Kadaster, via PDOK). Aaneengesloten woningen worden één rij, woongebouwen worden appartementen, winkels, kantoren, scholen en bedrijven worden utiliteit. Het label wordt geschat uit het bouwjaar. In het Liander-gebied komen de echte trafo's mee: capaciteit, NBL-limiet en gemeten piek.</p>
-      <label class="fld"><span>Buurt: naam met gemeente, of buurtcode (bijv. "Lombok Utrecht" of BU03440420)</span><input id="imp-q" type="search" autocomplete="off" placeholder="Zoek een buurt"></label>
-      <div id="imp-sug" class="sug" role="listbox" aria-label="Gevonden buurten"></div>
+<section id="tab-kies" role="tabpanel" aria-labelledby="t-kies" class="kies">
+  <div class="mapwrap"><div id="map" aria-label="Kaart van Nederland met CBS-buurten"></div><p class="hint" id="map-hint">Zoom in tot de buurtgrenzen verschijnen en klik op een buurt. Blauw omlijnde buurten hebben trafodata van Liander.</p></div>
+  <div class="kpanel">
+    <h2>Kies een buurt</h2>
+    <p class="note">Zoek of klik op de kaart. Buurtlab haalt de CBS-buurtgrens en alle gebouwen uit de BAG op (Kadaster, via PDOK). Aaneengesloten woningen worden één rij, woongebouwen worden appartementen, winkels, kantoren, scholen en bedrijven worden utiliteit. Het label wordt geschat uit het bouwjaar.</p>
+    <label class="fld"><span>Buurt: naam met gemeente, of buurtcode (bijv. "Lombok Utrecht" of BU03440420)</span><input id="imp-q" type="search" autocomplete="off" placeholder="Zoek een buurt"></label>
+    <div id="imp-sug" class="sug" role="listbox" aria-label="Gevonden buurten"></div>
+    <div class="card" id="bcard"><p class="note">Nog geen buurt gekozen.</p></div>
+    <div class="two">
+      <label class="fld"><span>Woningen met laadpaal (%)</span><input id="imp-lp" type="number" min="0" max="100" value="20"></label>
+      <label class="fld"><span>Woningen met zonnepanelen (%)</span><input id="imp-pv" type="number" min="0" max="100" value="30"></label>
     </div>
-    <div>
-      <div class="two">
-        <label class="fld"><span>Woningen met laadpaal (%)</span><input id="imp-lp" type="number" min="0" max="100" value="20"></label>
-        <label class="fld"><span>Woningen met zonnepanelen (%)</span><input id="imp-pv" type="number" min="0" max="100" value="30"></label>
-      </div>
-      <label class="chk"><input id="imp-wp" type="checkbox" checked> Woningen vanaf bouwjaar 2015 met warmtepomp, de rest met cv-ketel</label>
-      <div class="acts" style="margin-top:12px"><button class="btn prim" id="imp-go" disabled>Importeren</button><button class="btn" id="imp-close">Sluiten</button></div>
-      <p class="note" id="imp-st" role="status"></p>
-    </div>
+    <label class="chk"><input id="imp-wp" type="checkbox" checked> Woningen vanaf bouwjaar 2015 met warmtepomp, de rest met cv-ketel</label>
+    <div class="acts" style="margin-top:12px"><button class="btn prim" id="imp-go" disabled>Importeren en ontwerpen</button></div>
+    <p class="note" id="imp-st" role="status"></p>
+    <hr>
+    <h2 class="h3">Of begin zelf</h2>
+    <div class="acts"><button class="btn" id="start-leeg">Nieuwe buurt op leeg kavelgrid</button><button class="btn" id="start-vb">Voorbeeldbuurt</button><button class="btn" id="start-door" hidden>Verder met huidige buurt</button></div>
   </div>
 </section>
+<div id="tab-lab" role="tabpanel" aria-labelledby="t-lab" hidden>
+<div class="labbar"><p id="bname"></p><div class="acts"><button class="btn" id="undo">Ongedaan maken</button><button class="btn" id="reset">Voorbeeldbuurt</button><button class="btn warn" id="clear">Leeg kavelgrid</button></div></div>
 <main class="app">
   <section class="stage" aria-label="3D-buurt">
     <div id="view"></div>
@@ -175,6 +195,8 @@ textarea{width:100%;min-height:140px;font:13px/1.4 ui-monospace,monospace;paddin
     <div class="acts" style="margin-top:8px"><button class="btn" id="copy">Kopieer JSON</button><button class="btn" id="load">Laad JSON</button><span class="note" id="jmsg"></span></div>
   </details>
 </section>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script src="app.js"></script>
